@@ -29,9 +29,9 @@ def embed(sequence):
     print choice
     # Random chance here, testing for transitions
     if choice < 50:
-        sequence[pos: pos+6] = 'CAGCTG'
+        sequence[pos: pos+8] = 'CAGCTGTA'
     else:
-        sequence[pos: pos+6] = 'CAAGTG'
+        sequence[pos: pos+8] = 'CAAGTGTA'
 
 
 def simulate_data():
@@ -60,7 +60,7 @@ def simulate_data():
 
 def embed_test_motif(sequence, motif):
     pos = np.random.randint(5, 85)  # choose the insert position
-    sequence[pos: pos + 6] = motif
+    sequence[pos: pos + 8] = motif
 
 
 def simulate_test_dat(motif):    # define a integer --> str dictionary
@@ -84,7 +84,9 @@ def simulate_test_dat(motif):    # define a integer --> str dictionary
 def build_model():
     """ Define a Keras graph model with sequence and accesibility as input """
     seq_input = Input(shape=(100, 4,), name='seq')
-    xs = Conv1D(128, 16, padding="same", name='convolution_1')(seq_input)
+    xs = Conv1D(64, 16, padding="same", name='convolution_1')(seq_input)
+    xs = Activation('relu')(xs)
+    xs = Conv1D(64, 16, padding="same", name='convolution_2')(xs)
     xs = Activation('relu')(xs)
     xs = MaxPooling1D(padding="same", strides=15, pool_size=15)(xs)
     xs = Flatten()(xs)
@@ -104,7 +106,7 @@ def fit_model(dat, labels):
     model = build_model()
     sgd = SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
     model.compile(loss='binary_crossentropy', optimizer=sgd, metrics=['accuracy'])
-    model.fit(x=dat, y=labels, epochs=50, batch_size=256)
+    model.fit(x=dat, y=labels, epochs=30, batch_size=256)
     # save the model
     model.save('/Users/divyanshisrivastava/Desktop/model.hdf5')
     return model
@@ -125,16 +127,16 @@ def main():
     model = load_model('/Users/divyanshisrivastava/Desktop/model.hdf5')
     evaluate_model(model, X_test, y_test.astype(int))
 
-    test_dat_m, test_lab_m = simulate_test_dat('CAACTG')
+    test_dat_m, test_lab_m = simulate_test_dat('CAGCTGTA')
     print np.mean(model.predict(test_dat_m))
 
-    test_dat_m, test_lab_m = simulate_test_dat('CAAGTG')
+    test_dat_m, test_lab_m = simulate_test_dat('CAAGTGTA')
     print np.mean(model.predict(test_dat_m))
 
-    test_dat_m, test_lab_m = simulate_test_dat('CAGCTG')
+    test_dat_m, test_lab_m = simulate_test_dat('CAACTGTA')
     print np.mean(model.predict(test_dat_m))
 
-    test_dat_m, test_lab_m = simulate_test_dat('CCCCCC')
+    test_dat_m, test_lab_m = simulate_test_dat('CCCCCCCC')
     print np.mean(model.predict(test_dat_m))
 
 

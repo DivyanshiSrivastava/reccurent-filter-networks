@@ -58,19 +58,16 @@ if __name__ == "__main__":
     model = load_model('/Users/divyanshisrivastava/Desktop/model.hdf5')
     get_filters(model)
 
-    # Define the embedded motif
-    motif = 'TGATTTAT'
-    motif = 'AAAAAAAA'
-    motif_onehot = make_motif_onehot(motif)
-
-    filter_list = get_filters(model)
-
-    scores = []
-    for filter_weights in filter_list:
-        score = convolve(filter_weights, motif_onehot)
-        scores.append(score)
-    print np.sort(scores)
-    print max(scores)
+    for motif in ['AAATGAAA', 'AAACTAAA', 'AAATTAAA', 'AAAAAAAA', 'CCACACAC']:
+        motif_onehot = make_motif_onehot(motif)
+        filter_list = get_filters(model)
+        scores = []
+        for filter_weights in filter_list:
+            score = convolve(filter_weights, motif_onehot)
+            scores.append(score)
+        print motif
+        print np.sort(scores)
+        print max(scores)
 
 
 
