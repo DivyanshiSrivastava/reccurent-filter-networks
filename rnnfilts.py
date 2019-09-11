@@ -42,13 +42,13 @@ def simulate_data():
     # Simulating the negative data
     # These are 1000 sequences with background frequencies A/T=0.5
     seq_list = []
-    for idx in range(1000):
+    for idx in range(10000):
         sequence = np.random.randint(0, 4, 100)
         sequence = ''.join([letter[x] for x in sequence])
         seq_list.append((sequence, 0))  # The 0 here is the sequence label
     # Simulating the positive data
     # These are 1000 sequences with an embedded motif at any position
-    for idx in range(1000):
+    for idx in range(10000):
         sequence = np.random.randint(0, 4, 100)
         sequence = [letter[x] for x in sequence]
         embed(sequence)
@@ -116,9 +116,8 @@ def build_model():
         size = 10
         step = 1
         seq_length = 100
-        shared_layer = SimpleRNN(1, name='lstm' + str(idx))
+        shared_layer = SimpleRNN(1, name='RNN' + str(idx))
         while start_idx + step <= seq_length:
-            print start_idx
             sliced_input = crop(1, start_idx, start_idx + size)(seq_input)
             xs = shared_layer(sliced_input)
             lstm_outs.append(xs)
@@ -133,18 +132,14 @@ def build_model():
         filter_outs.append(rnn_filt(idx))
 
     xs = keras.layers.concatenate(filter_outs)
-    # ----100---, ----100----, ---1000--- #
     xs = Reshape((5, 100))(xs)
-    print xs.shape
 
     def permute(x):
         return K.permute_dimensions(x, (0, 2, 1))
-
-    LP = Lambda(permute)
-    xs = LP(xs)
-
+    permutation_layer = Lambda(permute)
+    xs = permutation_layer(xs)
     print xs.shape
-
+    xs = Conv1D(filters=16, kernel_size=10, padding='same')(xs)
     xs = MaxPooling1D(pool_size=100)(xs)
     xs = Activation('relu')(xs)
     print "Did pooling"
@@ -161,9 +156,9 @@ def fit_model(dat, labels):
     model = build_model()
     sgd = SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
     model.compile(loss='binary_crossentropy', optimizer=sgd, metrics=['accuracy'])
-    model.fit(x=dat, y=labels, epochs=100, batch_size=64)
+    model.fit(x=dat, y=labels, epochs=5, batch_size=64)
     # save the model
-    model.save('/Users/divyanshisrivastava/Desktop/model.hdf5')
+    model.save('/Users/asheesh/Desktop/model.hdf5')
     return model
 
 
@@ -179,20 +174,20 @@ def main():
     dat, labels = simulate_data()
     X_train, X_test, y_train, y_test = train_test_split(dat, labels)
     model = fit_model(X_train, y_train.astype(int))
-    # model = load_model('/Users/divyanshisrivastava/Desktop/model.hdf5')
-    # evaluate_model(model, X_test, y_test.astype(int))
+    model = load_model('/Users/asheesh/Desktop/model.hdf5')
+    evaluate_model(model, X_test, y_test.astype(int))
 
-    #test_dat_m, test_lab_m = simulate_test_dat('CAGCTGTA')
-    #print np.mean(model.predict(test_dat_m))
+    test_dat_m, test_lab_m = simulate_test_dat('CAGCTGTA')
+    print np.mean(model.predict(test_dat_m))
 
-    #test_dat_m, test_lab_m = simulate_test_dat('CAAGTGTA')
-    #print np.mean(model.predict(test_dat_m))
+    test_dat_m, test_lab_m = simulate_test_dat('CAAGTGTA')
+    print np.mean(model.predict(test_dat_m))
 
-    #test_dat_m, test_lab_m = simulate_test_dat('CAACTGTA')
-    #print np.mean(model.predict(test_dat_m))
+    test_dat_m, test_lab_m = simulate_test_dat('CAACTGTA')
+    print np.mean(model.predict(test_dat_m))
 
-    #test_dat_m, test_lab_m = simulate_test_dat('CCCCCCCC')
-    #print np.mean(model.predict(test_dat_m))
+    test_dat_m, test_lab_m = simulate_test_dat('CCCCCCCC')
+    print np.mean(model.predict(test_dat_m))
 
 
 if __name__ == '__main__':
