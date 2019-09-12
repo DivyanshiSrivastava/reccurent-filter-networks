@@ -1,143 +1,86 @@
 import numpy as np
-import sys, os
-import keras
-
-# sklearn imports
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import roc_auc_score
-from sklearn.metrics import average_precision_score
-
-# keras imports
-from keras.models import Model, load_model
-from keras.layers import Dense, Dropout, Activation, Flatten, Input
-from keras.layers import Conv1D, MaxPooling1D
-from keras.optimizers import SGD
+from keras.models import Model
 
 
 def make_onehot(buf, seq_length):
-    fd = {'A': [1, 0, 0, 0], 'T': [0, 1, 0, 0], 'G': [0, 0, 1, 0], 'C': [0, 0, 0, 1], 'N': [0, 0, 0, 0]}
-    onehot = [fd[base] for seq in buf for base in seq]
-    onehot_np = np.reshape(onehot, (-1, seq_length, 4))
-    return onehot_np
+
+    fd = {'A': [1, 0, 0, 0], 'T': [0, 1, 0, 0],
+          'G': [0, 0, 1, 0], 'C': [0, 0, 0, 1],
+          'N': [0, 0, 0, 0]}
+
+    one_hot = [fd[base] for seq in buf for base in seq]
+    one_hot_np = np.reshape(one_hot, (-1, seq_length, 4))
+    return one_hot_np
 
 
-def embed(sequence):
-    pos = np.random.randint(5, 85)  # choose the insert position
+class TrainingData:
 
-    # Draw from a uniform 0, 100
-    choice = np.random.randint(0, 100)
-    print choice
-    # Random chance here, testing for transitions
-    if choice < 50:
-        sequence[pos: pos+6] = 'CAGCTG'
-    else:
-        sequence[pos: pos+6] = 'CAAGTG'
+    def __init__(self, motif_a, motif_b, N, seq_length):
+        self.motif_a = motif_a
+        self.motif_b = motif_b
+        self.N = N
+        self.seq_length = seq_length
 
+    def embed(self, sequence):
+        # choose an appropriate position
+        pos = np.random.randint(5, 85)  # choose the insert position
+        # embed motif randomly
+        choice = np.random.randint(0, 100)
+        size_a = len(self.motif_a)
+        size_b = len(self.motif_b)
 
-def simulate_data():
-    # define a integer --> str dictionary
-    letter = {0: 'A', 1: 'T', 2: 'G', 3: 'C'}
-    # Simulating the negative data
-    # These are 1000 sequences with background frequencies A/T=0.5
-    seq_list = []
-    for idx in range(10000):
-        sequence = np.random.randint(0, 4, 100)
-        sequence = ''.join([letter[x] for x in sequence])
-        seq_list.append((sequence, 0))  # The 0 here is the sequence label
-    # Simulating the positive data
-    # These are 1000 sequences with an embedded motif at any position
-    for idx in range(10000):
-        sequence = np.random.randint(0, 4, 100)
-        sequence = [letter[x] for x in sequence]
-        embed(sequence)
-        seq_list.append((''.join(sequence), 1))  # Doing the join after the embedding for the positive set
-    # extracting the sequence data
-    dat = np.array(seq_list)[:, 0]
-    dat = make_onehot(dat, seq_length=100)
-    labels = np.array(seq_list)[:, 1]
-    return dat, labels
+        if choice < 50:
+            sequence[pos: pos + size_a] = self.motif_a
+        else:
+            sequence[pos: pos + size_b] = self.motif_b
 
-
-def embed_test_motif(sequence, motif):
-    pos = np.random.randint(5, 85)  # choose the insert position
-    sequence[pos: pos + 6] = motif
-
-
-def simulate_test_dat(motif):    # define a integer --> str dictionary
-    letter = {0: 'A', 1: 'T', 2: 'G', 3: 'C'}
-    # Simulating the negative data
-    # These are 1000 sequences with background frequencies A/T=0.5
-    seq_list = []
-
-    for idx in range(1000):
-        sequence = np.random.randint(0, 4, 100)
-        sequence = [letter[x] for x in sequence]
-        embed_test_motif(sequence, motif)
-        seq_list.append((''.join(sequence), 1))  # Doing the join after the embedding for the positive set
-    # extracting the sequence data
-    dat = np.array(seq_list)[:, 0]
-    dat = make_onehot(dat, seq_length=100)
-    labels = np.array(seq_list)[:, 1]
-    return dat, labels
+    def simulate_data(self):
+        # Define a integer --> str dictionary
+        letter = {0: 'A', 1: 'T', 2: 'G', 3: 'C'}
+        # Construct N positive and N negative sequences with background frequencies A/T=0.5
+        seq_list = []
+        # Unbound Synthetic Data
+        for idx in range(self.N):
+            sequence = np.random.randint(0, 4, self.seq_length)
+            sequence = ''.join([letter[x] for x in sequence])
+            seq_list.append((sequence, 0))  # Note: The 0 here is the sequence label
+        # Bound Synthetic Data
+        # N sequences with an embedded motif b/w positions [ 25, seq_length - 25] # Buffer : 25
+        for idx in range(self.N):
+            sequence = np.random.randint(0, 4, self.seq_length)
+            sequence = [letter[x] for x in sequence]
+            self.embed(sequence)
+            seq_list.append((''.join(sequence), 1))  # Doing the join after the embedding for the positive set
+        # Making the Sequence Data one-hot
+        dat = np.array(seq_list)[:, 0]
+        dat = make_onehot(dat, seq_length=self.seq_length)
+        labels = np.array(seq_list)[:, 1]
+        return dat, labels
 
 
-def build_model():
-    """ Define a Keras graph model with sequence and accesibility as input """
-    seq_input = Input(shape=(100, 4,), name='seq')
-    xs = Conv1D(128, 16, padding="same", name='convolution_1')(seq_input)
-    xs = Activation('relu')(xs)
-    xs = MaxPooling1D(padding="same", strides=15, pool_size=15)(xs)
-    xs = Flatten()(xs)
-    # fully connected dense layers
-    xs = Dense(32, activation='relu')(xs)
-    xs = Dropout(0.75)(xs)
-    xs = Dense(32, activation='relu')(xs)
-    xs = Dropout(0.75)(xs)
-    xs = Dense(16, activation='relu')(xs)
-    result = Dense(1, activation='sigmoid')(xs)
-    # define the model input & output
-    model = Model(inputs=seq_input, outputs=result)
-    return model
+class TestData:
 
+    def __init__(self, seq_length, model):
+        self.seq_length = seq_length
+        self.model = model
 
-def fit_model(dat, labels):
-    model = build_model()
-    sgd = SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
-    model.compile(loss='binary_crossentropy', optimizer=sgd, metrics=['accuracy'])
-    model.fit(x=dat, y=labels, epochs=50, batch_size=256)
-    # save the model
-    model.save('/Users/divyanshisrivastava/Desktop/model.hdf5')
-    return model
+    def embed_test_motif(self, sequence, motif):
+        pos = np.random.randint(25, self.seq_length - 25)  # Buffer : 25
+        size = len(motif)
+        sequence[pos: pos + size] = motif
 
+    def simulate_test_dat(self, motif):
+        # Define a integer --> str dictionary
+        letter = {0: 'A', 1: 'T', 2: 'G', 3: 'C'}
+        # Simulating a 1000 sequences to measure network performance
+        seq_list = []
 
-def evaluate_model(model, test_dat, test_labels):
-    probas = model.predict(test_dat)
-    auroc = roc_auc_score(test_labels, probas)
-    auprc = average_precision_score(test_labels, probas)
-    print "auroc:", auroc
-    print "auc(pr):", auprc
-
-
-def main():
-    dat, labels = simulate_data()
-    X_train, X_test, y_train, y_test = train_test_split(dat, labels)
-    model = fit_model(X_train, y_train.astype(int))
-    model = load_model('/Users/divyanshisrivastava/Desktop/model.hdf5')
-    evaluate_model(model, X_test, y_test.astype(int))
-
-    test_dat_m, test_lab_m = simulate_test_dat('CAACTG')
-    print np.mean(model.predict(test_dat_m))
-
-    test_dat_m, test_lab_m = simulate_test_dat('CAAGTG')
-    print np.mean(model.predict(test_dat_m))
-
-    test_dat_m, test_lab_m = simulate_test_dat('CAGCTG')
-    print np.mean(model.predict(test_dat_m))
-
-    test_dat_m, test_lab_m = simulate_test_dat('CCCCCC')
-    print np.mean(model.predict(test_dat_m))
-
-
-if __name__ == '__main__':
-    main()
+        for idx in range(1000):
+            sequence = np.random.randint(0, 4, self.seq_length)
+            sequence = [letter[x] for x in sequence]
+            self.embed_test_motif(sequence, motif)
+            seq_list.append(''.join(sequence))  # Doing the join after the embedding for the positive set
+        dat = np.array(seq_list)
+        dat = make_onehot(dat, seq_length=self.seq_length)
+        return np.mean(self.model.predict(dat))
 
