@@ -1,5 +1,6 @@
 import numpy as np
 import keras
+import argparse
 
 # sklearn imports
 from sklearn.model_selection import train_test_split
@@ -142,16 +143,39 @@ class RNF:
 def fit_model(model_type, dat, labels, batch_size):
 
     if model_type == 'conv':
-        architecture = ConvModel(seq_length=100, conv_layers=10, conv_filters=64,
-                                 conv_kernel_size=24, dense_nodes=32)
+        # choose the parameters here:
+        conv_layers = range(1, 10)
+        conv_filters = [32, 64, 128, 256]
+        conv_kernel_size = [6, 12, 16, 24]
+        dense_nodes = [32, 64, 128]
+        params = []
+        for parameters in [conv_layers, conv_filters, conv_kernel_size, dense_nodes]:
+            options = len(parameters)
+            rnum = np.random.choice(options)
+            params.append(parameters[rnum])
+        # Need to code this in a more robust way.
+        architecture = ConvModel(seq_length=100, conv_layers=params[0], conv_filters=params[1],
+                                 conv_kernel_size=params[2], dense_nodes=params[3])
         model = architecture.convolution_model()
     else:
-        architecture = RNF(seq_length=100, rnf_filters=6, rnf_kernel_size=12,
-                           conv_filters=64, conv_kernel_size=24, dense_nodes=32)
+
+        # choose the parameters here:
+        conv_filters = [32, 64, 128, 256]
+        conv_kernel_size = [6, 12, 16, 24]
+        dense_nodes = [32, 64, 128]
+        rnf_filters = [6, 12, 24, 64]
+        rnf_kernel_size = [6, 12, 16, 24]
+        params = []
+        for parameters in [conv_filters, conv_kernel_size, dense_nodes, rnf_filters, rnf_kernel_size]:
+            options = len(parameters)
+            rnum = np.random.choice(options)
+            params.append(parameters[rnum])
+        architecture = RNF(seq_length=100, conv_filters=params[0], conv_kernel_size=params[1], dense_nodes=params[2],
+                           rnf_filters=params[4], rnf_kernel_size=params[5])
         model = architecture.rnf_model()
 
+    # Splitting data into test and train
     X_train, X_test, y_train, y_test = train_test_split(dat, labels.astype(int))
-
     # Define the optimization here:
     sgd = SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
     model.compile(loss='binary_crossentropy',
@@ -164,34 +188,44 @@ def fit_model(model_type, dat, labels, batch_size):
     probas = model.predict(X_test)
     auroc = roc_auc_score(y_test, probas)
     auprc = average_precision_score(y_test, probas)
-    print auroc, auprc
-    return model
+    return model, params, auroc, auprc
 
 
 def main():
 
-    # Defining the motifs
-    motif_a = 'TAATGA'
-    motif_b = 'TAATCT'
-    motif_flipped = 'TAATCA'
-    motif_random = 'AAAAAA'
+    parser = argparse.ArgumentParser(description='Compare CNNs to RNFs for DNA sequence')
+    parser.add_argument('design', help='Tab-delimited file with the 4 motifs to use')
+    parser.add_argument('outfile', help='Outfile with model deets')
+    args = parser.parse_args()
 
+    motif_file = args.design
+    motif_a, motif_b, motif_flipped, motif_random = np.loadtxt(motif_file, dtype=str, delimiter='\t')
     # Instantiate an instance of TrainingData
     # Change N / Test over many N's.
     train_data = TrainingData(motif_a=motif_a, motif_b=motif_b, N=10000, seq_length=100)
 
     # Getting the synthetic X and y data
     dat, labels = train_data.simulate_data()
-    model = fit_model(model_type='conv', dat=dat, labels=labels, batch_size=64)  # Keeping the batch size fixed for now.
+    model, params, auroc, auprc = fit_model(model_type='conv', dat=dat, labels=labels, batch_size=64)
 
     # Instantiating an instance of Evaluating Composition
-
     td = TestData(seq_length=100, model=model)
     # Testing across 4 motifs
-    print td.simulate_test_dat(motif_a)
-    print td.simulate_test_dat(motif_b)
-    print td.simulate_test_dat(motif_flipped)
-    print td.simulate_test_dat(motif_random)
+
+    with open(args.outfile, 'w') as fp_out:
+
+        # Write to file params and dtype and performance
+        motif_a_score = td.simulate_test_dat(motif_a)
+        fp_out.write('{},{}'.format(motif_a, motif_a_score))
+
+        motif_b_score = td.simulate_test_dat(motif_b)
+        fp_out.write('{},{}'.format(motif_b, motif_b_score))
+
+        motif_flipped_score = td.simulate_test_dat(motif_flipped)
+        fp_out.write('{},{}'.format(motif_flipped, motif_flipped_score))
+
+        motif_random_score = td.simulate_test_dat(motif_random)
+        fp_out.write('{},{}'.format(motif_random, motif_random_score))
 
 
 if __name__ == '__main__':
