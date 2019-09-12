@@ -11,6 +11,7 @@ from sklearn.metrics import average_precision_score
 from keras.models import Model, load_model
 from keras.layers import Dense, Dropout, Activation, Flatten, Input
 from keras.layers import Conv1D, MaxPooling1D, LSTM, Reshape, SimpleRNN
+from keras.layers import TimeDistributed
 from keras.optimizers import SGD
 from keras.layers import Lambda
 import keras.backend as K
@@ -28,12 +29,11 @@ def embed(sequence):
 
     # Draw from a uniform 0, 100
     choice = np.random.randint(0, 100)
-    print choice
     # Random chance here, testing for transitions
     if choice < 50:
-        sequence[pos: pos+8] = 'CAGCTGTA'
+        sequence[pos: pos+8] = 'CAGCTGAA'
     else:
-        sequence[pos: pos+8] = 'CAAGTGTA'
+        sequence[pos: pos+8] = 'CAGCTGGG'
 
 
 def simulate_data():
@@ -42,13 +42,13 @@ def simulate_data():
     # Simulating the negative data
     # These are 1000 sequences with background frequencies A/T=0.5
     seq_list = []
-    for idx in range(10000):
+    for idx in range(5000):
         sequence = np.random.randint(0, 4, 100)
         sequence = ''.join([letter[x] for x in sequence])
         seq_list.append((sequence, 0))  # The 0 here is the sequence label
     # Simulating the positive data
     # These are 1000 sequences with an embedded motif at any position
-    for idx in range(10000):
+    for idx in range(5000):
         sequence = np.random.randint(0, 4, 100)
         sequence = [letter[x] for x in sequence]
         embed(sequence)
@@ -115,37 +115,36 @@ def build_model():
         start_idx = 0
         size = 10
         step = 1
-        seq_length = 100
-        shared_layer = SimpleRNN(1, name='RNN' + str(idx))
+        seq_length = 90
+        shared_layer = LSTM(1, name='RNN' + str(idx))
+        input_chunks = []
         while start_idx + step <= seq_length:
             sliced_input = crop(1, start_idx, start_idx + size)(seq_input)
-            xs = shared_layer(sliced_input)
-            lstm_outs.append(xs)
+            input_chunks.append(sliced_input)
             start_idx += step
-        merged_vector = keras.layers.concatenate(lstm_outs, axis=-1)
-        print merged_vector.shape
-        # filter_val = keras.backend.max(merged_vector, axis=-1, keepdims=False)
-        return merged_vector
+        input_chunks = keras.layers.concatenate(input_chunks, axis=1)
+        print input_chunks.shape
+        input_chunks = Reshape((90, 10, 4))(input_chunks)
+        print input_chunks.shape
+        xs = TimeDistributed(shared_layer)(input_chunks)
+        print xs.shape
+        return xs
 
     filter_outs = []
-    for idx in range(5):
+    for idx in range(12):
         filter_outs.append(rnn_filt(idx))
 
     xs = keras.layers.concatenate(filter_outs)
-    xs = Reshape((5, 100))(xs)
-
-    def permute(x):
-        return K.permute_dimensions(x, (0, 2, 1))
-    permutation_layer = Lambda(permute)
-    xs = permutation_layer(xs)
-    print xs.shape
-    xs = Conv1D(filters=16, kernel_size=10, padding='same')(xs)
-    xs = MaxPooling1D(pool_size=100)(xs)
     xs = Activation('relu')(xs)
-    print "Did pooling"
+
+    xs = Conv1D(filters=32, kernel_size=10)(xs) # These parameters are controlling this?
+    # xs = Conv1D(filters=64, kernel_size=16)(xs) # Are these parameters also controll
+    xs = Activation('relu')(xs)
+    xs = MaxPooling1D(pool_size=10)(xs)
     print xs.shape
     xs = Flatten()(xs)
     # fully connected dense layers
+    xs = Dense(16, activation='relu')(xs)
     result = Dense(1, activation='sigmoid')(xs)
     # define the model input & output
     model = Model(inputs=seq_input, outputs=result)
@@ -156,7 +155,7 @@ def fit_model(dat, labels):
     model = build_model()
     sgd = SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
     model.compile(loss='binary_crossentropy', optimizer=sgd, metrics=['accuracy'])
-    model.fit(x=dat, y=labels, epochs=5, batch_size=64)
+    model.fit(x=dat, y=labels, epochs=10, batch_size=64)
     # save the model
     model.save('/Users/asheesh/Desktop/model.hdf5')
     return model
@@ -177,13 +176,13 @@ def main():
     model = load_model('/Users/asheesh/Desktop/model.hdf5')
     evaluate_model(model, X_test, y_test.astype(int))
 
-    test_dat_m, test_lab_m = simulate_test_dat('CAGCTGTA')
+    test_dat_m, test_lab_m = simulate_test_dat('CAGCTGAA')
     print np.mean(model.predict(test_dat_m))
 
-    test_dat_m, test_lab_m = simulate_test_dat('CAAGTGTA')
+    test_dat_m, test_lab_m = simulate_test_dat('CAGCTGGG')
     print np.mean(model.predict(test_dat_m))
 
-    test_dat_m, test_lab_m = simulate_test_dat('CAACTGTA')
+    test_dat_m, test_lab_m = simulate_test_dat('CAGCTGAG')
     print np.mean(model.predict(test_dat_m))
 
     test_dat_m, test_lab_m = simulate_test_dat('CCCCCCCC')
