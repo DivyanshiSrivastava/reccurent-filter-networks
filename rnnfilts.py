@@ -171,7 +171,7 @@ def fit_model(model_type, dat, labels, batch_size):
             rnum = np.random.choice(options)
             params.append(parameters[rnum])
         architecture = RNF(seq_length=100, conv_filters=params[0], conv_kernel_size=params[1], dense_nodes=params[2],
-                           rnf_filters=params[4], rnf_kernel_size=params[5])
+                           rnf_filters=params[3], rnf_kernel_size=params[4])
         model = architecture.rnf_model()
 
     # Splitting data into test and train
@@ -181,7 +181,7 @@ def fit_model(model_type, dat, labels, batch_size):
     model.compile(loss='binary_crossentropy',
                   optimizer=sgd, metrics=['accuracy'])
     earlystop = EarlyStopping(monitor='val_loss', mode='min',
-                              verbose=1, patience=16)
+                              verbose=1, patience=8)
     model.fit(x=X_train, y=y_train, epochs=32, batch_size=batch_size,
               validation_split=0.2, callbacks=[earlystop])
 
@@ -196,36 +196,45 @@ def main():
     parser = argparse.ArgumentParser(description='Compare CNNs to RNFs for DNA sequence')
     parser.add_argument('design', help='Tab-delimited file with the 4 motifs to use')
     parser.add_argument('outfile', help='Outfile with model deets')
+    parser.add_argument('mtype', help='conv or rnf model')
+    parser.add_argument('nseqs', help='N of seqs to test on')
+    parser.add_argument('idx', help='curr_idx')
+
     args = parser.parse_args()
 
     motif_file = args.design
     motif_a, motif_b, motif_flipped, motif_random = np.loadtxt(motif_file, dtype=str, delimiter='\t')
     # Instantiate an instance of TrainingData
     # Change N / Test over many N's.
-    train_data = TrainingData(motif_a=motif_a, motif_b=motif_b, N=10000, seq_length=100)
+    train_data = TrainingData(motif_a=motif_a, motif_b=motif_b, N=int(args.nseqs), seq_length=100)
 
     # Getting the synthetic X and y data
     dat, labels = train_data.simulate_data()
-    model, params, auroc, auprc = fit_model(model_type='conv', dat=dat, labels=labels, batch_size=64)
+    model, params, auroc, auprc = fit_model(model_type=args.mtype, dat=dat, labels=labels, batch_size=64)
 
     # Instantiating an instance of Evaluating Composition
     td = TestData(seq_length=100, model=model)
     # Testing across 4 motifs
 
-    with open(args.outfile, 'w') as fp_out:
-
+    outfile = args.outfile + '.' + args.idx + '.txt'
+    with open(outfile, 'w') as fp_out:
         # Write to file params and dtype and performance
+        fp_out.write('auROC:{}\n'.format(auroc))
+        fp_out.write('auPRC:{}\n'.format(auprc))
+        fp_out.write('Model:{}\n'.format(args.mtype))
+        fp_out.write('Params:{}\n'.format(params))
+        # Perf.
         motif_a_score = td.simulate_test_dat(motif_a)
-        fp_out.write('{},{}'.format(motif_a, motif_a_score))
+        fp_out.write('{},{}\n'.format(motif_a, motif_a_score))
 
         motif_b_score = td.simulate_test_dat(motif_b)
-        fp_out.write('{},{}'.format(motif_b, motif_b_score))
+        fp_out.write('{},{}\n'.format(motif_b, motif_b_score))
 
         motif_flipped_score = td.simulate_test_dat(motif_flipped)
-        fp_out.write('{},{}'.format(motif_flipped, motif_flipped_score))
+        fp_out.write('{},{}\n'.format(motif_flipped, motif_flipped_score))
 
         motif_random_score = td.simulate_test_dat(motif_random)
-        fp_out.write('{},{}'.format(motif_random, motif_random_score))
+        fp_out.write('{},{}\n'.format(motif_random, motif_random_score))
 
 
 if __name__ == '__main__':
