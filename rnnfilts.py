@@ -216,7 +216,7 @@ def main():
     td = TestData(seq_length=100, model=model)
     # Testing across 4 motifs
 
-    outfile = args.outfile + '.' + args.idx + '.txt'
+    outfile = args.outfile + '.' + args.mtype + '.' + args.idx + '.txt'
     with open(outfile, 'w') as fp_out:
         # Write to file params and dtype and performance
         fp_out.write('auROC:{}\n'.format(auroc))
