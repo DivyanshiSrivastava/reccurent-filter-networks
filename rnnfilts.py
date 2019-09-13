@@ -163,7 +163,7 @@ def fit_model(model_type, dat, labels, batch_size):
         conv_filters = [32, 64, 128, 256]
         conv_kernel_size = [6, 12, 16, 24]
         dense_nodes = [32, 64, 128]
-        rnf_filters = [6, 12, 24, 64]
+        rnf_filters = [6, 12, 24]
         rnf_kernel_size = [6, 12, 16, 24]
         params = []
         for parameters in [conv_filters, conv_kernel_size, dense_nodes, rnf_filters, rnf_kernel_size]:
@@ -239,4 +239,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
