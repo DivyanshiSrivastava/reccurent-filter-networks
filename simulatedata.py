@@ -38,9 +38,9 @@ class TrainingData:
 
         if choice < 25:
             sequence[pos: pos + size_a] = self.motif_a
-        if 25 <= choice < 50:
+        elif 25 <= choice < 50:
             sequence[pos: pos + size_a] = self.rc(self.motif_a)
-        if 50 <= choice < 75:
+        elif 50 <= choice < 75:
             sequence[pos: pos + size_b] = self.motif_b
         else:
             sequence[pos: pos + size_b] = self.rc(self.motif_b)
