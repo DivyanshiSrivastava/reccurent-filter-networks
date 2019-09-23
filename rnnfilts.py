@@ -154,7 +154,7 @@ def fit_model(model_type, dat, labels, batch_size, seq_length, mp):
 
     if model_type == 'conv':
         # choose the parameters here:
-        conv_layers = range(1, 10)
+        conv_layers = range(2, 10)  # Cause 1 is already for the MP case.
         conv_filters = [32, 64, 128, 256]
         conv_kernel_size = [6, 12, 16, 24]
         dense_nodes = [32, 64, 128]
