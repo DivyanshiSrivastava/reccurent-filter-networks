@@ -34,26 +34,36 @@ def make_onehot(buf, seq_length):
 class ConvModel:
 
     def __init__(self, seq_length, conv_layers, conv_filters, conv_kernel_size,
-                 dense_nodes):
+                 dense_nodes, mp):
         self.seq_length = seq_length
         self.conv_layers = conv_layers
         self.conv_filters = conv_filters
         self.conv_kernel_size = conv_kernel_size
         self.dense_nodes = dense_nodes
+        self.mp = mp
 
     def convolution_model(self):
         seq_input = Input(shape=(self.seq_length, 4,), name='seq')
 
         assert self.conv_layers > 0
 
-        for idx in range(self.conv_layers):
-            # Adding in convolution layers
-            layer_name = 'convolution' + str(idx + 1)
+        print self.mp
+
+        if self.mp == 'True':
+            # If pooling is turned on
             xs = Conv1D(filters=self.conv_filters, kernel_size=self.conv_kernel_size,
-                        padding='same', name=layer_name)(seq_input)
+                        padding='same', name='convolution1')(seq_input)
             xs = Activation('relu')(xs)
 
-        xs = MaxPooling1D(padding='same', strides=15, pool_size=15)(xs)
+        else:
+            for idx in range(self.conv_layers):
+                # Adding in convolution layers
+                layer_name = 'convolution' + str(idx + 1)
+                xs = Conv1D(filters=self.conv_filters, kernel_size=self.conv_kernel_size,
+                            padding='same', name=layer_name)(seq_input)
+                xs = Activation('relu')(xs)
+            xs = MaxPooling1D(padding='same', strides=15, pool_size=15)(xs)
+
         xs = Flatten()(xs)
         # 2 FC dense layers
         xs = Dense(self.dense_nodes, activation='relu')(xs)
@@ -140,7 +150,7 @@ class RNF:
         return model
 
 
-def fit_model(model_type, dat, labels, batch_size):
+def fit_model(model_type, dat, labels, batch_size, seq_length, mp):
 
     if model_type == 'conv':
         # choose the parameters here:
@@ -154,8 +164,8 @@ def fit_model(model_type, dat, labels, batch_size):
             rnum = np.random.choice(options)
             params.append(parameters[rnum])
         # Need to code this in a more robust way.
-        architecture = ConvModel(seq_length=100, conv_layers=params[0], conv_filters=params[1],
-                                 conv_kernel_size=params[2], dense_nodes=params[3])
+        architecture = ConvModel(seq_length=seq_length, conv_layers=params[0], conv_filters=params[1],
+                                 conv_kernel_size=params[2], dense_nodes=params[3], mp=mp)
         model = architecture.convolution_model()
     else:
 
@@ -170,7 +180,7 @@ def fit_model(model_type, dat, labels, batch_size):
             options = len(parameters)
             rnum = np.random.choice(options)
             params.append(parameters[rnum])
-        architecture = RNF(seq_length=100, conv_filters=params[0], conv_kernel_size=params[1], dense_nodes=params[2],
+        architecture = RNF(seq_length=seq_length, conv_filters=params[0], conv_kernel_size=params[1], dense_nodes=params[2],
                            rnf_filters=params[3], rnf_kernel_size=params[4])
         model = architecture.rnf_model()
 
@@ -198,7 +208,10 @@ def main():
     parser.add_argument('outfile', help='Outfile with model deets')
     parser.add_argument('mtype', help='conv or rnf model')
     parser.add_argument('nseqs', help='N of seqs to test on')
+    parser.add_argument('nseqs_multiplier', help='N of seqs to test on')
+    parser.add_argument('nseqs_negative', help='N of seqs to test on')
     parser.add_argument('idx', help='curr_idx')
+    parser.add_argument('MP_status', help='To max pool after 1 conv. layer or not. ')
 
     args = parser.parse_args()
 
@@ -206,14 +219,17 @@ def main():
     motif_a, motif_b, motif_flipped, motif_random = np.loadtxt(motif_file, dtype=str, delimiter='\t')
     # Instantiate an instance of TrainingData
     # Change N / Test over many N's.
-    train_data = TrainingData(motif_a=motif_a, motif_b=motif_b, N=int(args.nseqs), seq_length=100)
+    train_data = TrainingData(motif_a=motif_a, motif_b=motif_b, N=int(args.nseqs),
+                              N_mult=int(args.nseqs_multiplier), N_neg=int(args.nseqs_negative),
+                              seq_length=500)
 
     # Getting the synthetic X and y data
     dat, labels = train_data.simulate_data()
-    model, params, auroc, auprc = fit_model(model_type=args.mtype, dat=dat, labels=labels, batch_size=64)
+    model, params, auroc, auprc = fit_model(model_type=args.mtype, dat=dat, labels=labels, batch_size=64,
+                                            seq_length=500, mp=args.MP_status)
 
     # Instantiating an instance of Evaluating Composition
-    td = TestData(seq_length=100, model=model)
+    td = TestData(seq_length=500, model=model)
     # Testing across 4 motifs
 
     outfile = args.outfile + '.' + args.mtype + '.' + args.idx + '.txt'
