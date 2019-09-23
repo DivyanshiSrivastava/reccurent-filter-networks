@@ -232,8 +232,8 @@ def main():
     td = TestData(seq_length=500, model=model)
     # Testing across 4 motifs
 
-    outfile = args.outfile + '.' + args.mtype + '.' + args.N + '.' + args.mult + '.' + args.neg + '.' +\
-              args.MP + '.' + args.idx + '.txt'
+    outfile = args.outfile + '.' + args.mtype + '.' + args.nseqs + '.' + args.nseqs_multiplier\
+              + '.' + args.nseqs_negative + '.' + args.MP_status + '.' + args.idx + '.txt'
 
     with open(outfile, 'w') as fp_out:
         # Write to file params and dtype and performance
