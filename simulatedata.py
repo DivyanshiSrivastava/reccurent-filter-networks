@@ -15,11 +15,18 @@ def make_onehot(buf, seq_length):
 
 class TrainingData:
 
-    def __init__(self, motif_a, motif_b, N, seq_length):
+    def __init__(self, motif_a, motif_b, N, N_mult, N_neg, seq_length):
         self.motif_a = motif_a
         self.motif_b = motif_b
         self.N = N
+        self.N_mult = N_mult
+        self.N_neg = N_neg
         self.seq_length = seq_length
+
+    def rc(self, motif):
+        rc_dict = {'A': 'T', 'G': 'C', 'T': 'A', 'C': 'G'}
+        rc_list = [rc_dict[letter] for letter in motif]
+        return ''.join(rc_list)
 
     def embed(self, sequence):
         # choose an appropriate position
@@ -29,10 +36,14 @@ class TrainingData:
         size_a = len(self.motif_a)
         size_b = len(self.motif_b)
 
-        if choice < 50:
+        if choice < 25:
             sequence[pos: pos + size_a] = self.motif_a
-        else:
+        if 25 <= choice < 50:
+            sequence[pos: pos + size_a] = self.rc(self.motif_a)
+        if 50 <= choice < 75:
             sequence[pos: pos + size_b] = self.motif_b
+        else:
+            sequence[pos: pos + size_b] = self.rc(self.motif_b)
 
     def simulate_data(self):
         # Define a integer --> str dictionary
@@ -40,7 +51,7 @@ class TrainingData:
         # Construct N positive and N negative sequences with background frequencies A/T=0.5
         seq_list = []
         # Unbound Synthetic Data
-        for idx in range(self.N):
+        for idx in range(self.N_neg):
             sequence = np.random.randint(0, 4, self.seq_length)
             sequence = ''.join([letter[x] for x in sequence])
             seq_list.append((sequence, 0))  # Note: The 0 here is the sequence label
@@ -50,7 +61,9 @@ class TrainingData:
             sequence = np.random.randint(0, 4, self.seq_length)
             sequence = [letter[x] for x in sequence]
             self.embed(sequence)
-            seq_list.append((''.join(sequence), 1))  # Doing the join after the embedding for the positive set
+            # Adding in the sequence N_mult times.
+            for idx in range(self.N_mult):
+                seq_list.append((''.join(sequence), 1))  # Doing the join after the embedding for the positive set
         # Making the Sequence Data one-hot
         dat = np.array(seq_list)[:, 0]
         dat = make_onehot(dat, seq_length=self.seq_length)
