@@ -232,7 +232,9 @@ def main():
     td = TestData(seq_length=500, model=model)
     # Testing across 4 motifs
 
-    outfile = args.outfile + '.' + args.mtype + '.' + args.idx + '.txt'
+    outfile = args.outfile + '.' + args.mtype + '.' + args.N + '.' + args.mult + '.' + args.neg + '.' +\
+              args.MP + '.' + args.idx + '.txt'
+
     with open(outfile, 'w') as fp_out:
         # Write to file params and dtype and performance
         fp_out.write('auROC:{}\n'.format(auroc))
@@ -251,6 +253,7 @@ def main():
 
         motif_random_score = td.simulate_test_dat(motif_random)
         fp_out.write('{},{}\n'.format(motif_random, motif_random_score))
+    model.save(outfile + '.hdf5')
 
 
 if __name__ == '__main__':
