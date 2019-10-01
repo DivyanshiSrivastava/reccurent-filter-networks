@@ -15,6 +15,8 @@ from keras.layers import Conv1D, MaxPooling1D, LSTM, Reshape
 from keras.layers import TimeDistributed
 from keras.optimizers import SGD
 from keras.layers import Lambda
+from keras.engine import Layer
+import keras.backend as K
 
 # local imports
 from simulatedata import TrainingData, TestData
@@ -29,6 +31,71 @@ def make_onehot(buf, seq_length):
     one_hot = [fd[base] for seq in buf for base in seq]
     one_hot_np = np.reshape(one_hot, (-1, seq_length, 4))
     return one_hot_np
+
+
+# This class is adapted from: https://github.com/bloomberg/cnn-rnf/blob/master/cnn_keras.py
+class DistInputLayer(Layer):
+    """
+        Distribute word vectors into chunks - input for the convolution operation
+        Input dim: [batch_size x sentence_len x word_vec_dim]
+        Output dim: [batch_size x (sentence_len - filter_width + 1) x filter_width x word_vec_dim]
+    """
+
+    def __init__(self, filter_width, seq_len, **kwargs):
+        super(DistInputLayer, self).__init__(**kwargs)
+        self.filter_width = filter_width
+        self.seq_len = seq_len
+
+    def call(self, x):
+        chunks = []
+        print self.seq_len - self.filter_width + 1
+        for start_idx in range(self.seq_len - self.filter_width + 1):
+            chunk = x[:, start_idx: start_idx + self.filter_width]
+            chunk = K.expand_dims(chunk, 1)
+            chunks.append(chunk)
+        input_chunks = keras.layers.concatenate(chunks, axis=1)
+
+        dim_0_size = self.seq_len - self.filter_width + 1
+        input_chunks = Reshape((dim_0_size, self.filter_width, 4))(input_chunks)
+        return input_chunks
+
+    def compute_output_shape(self, input_shape):
+        output_shape = (input_shape[0], self.seq_len - self.filter_width + 1, self.filter_width, input_shape[-1])
+        return output_shape
+
+
+class RnfFast:
+    def __init__(self, seq_length, rnf_filters, rnf_kernel_size, conv_filters, conv_kernel_size,
+                 dense_nodes, rnf_dim):
+        self.seq_length = seq_length
+        self.rnf_kernel_size = rnf_kernel_size
+        self.rnf_filters = rnf_filters
+        self.conv_filters = conv_filters
+        self.conv_kernel_size = conv_kernel_size
+        self.dense_nodes = dense_nodes
+        self.rnf_dim = rnf_dim
+
+    def rnf_model(self):
+
+        seq_input = Input(shape=(self.seq_length, 4,), name='seq')
+        embedded_inp = DistInputLayer(filter_width=self.rnf_kernel_size, seq_len=self.seq_length)(seq_input)
+        xs = TimeDistributed(LSTM(self.rnf_dim))(embedded_inp)
+        xs = Activation('relu')(xs)
+        xs = Conv1D(filters=self.conv_filters, kernel_size=self.conv_kernel_size)(xs)
+        xs = Activation('relu')(xs)
+        # From here on, the model is identical to the convolutional model.
+        xs = MaxPooling1D(padding='same', strides=15, pool_size=15)(xs)
+        xs = Flatten()(xs)
+        # 2 FC dense layers
+        xs = Dense(self.dense_nodes, activation='relu')(xs)
+        xs = Dropout(0.5)(xs)
+        xs = Dense(self.dense_nodes, activation='relu')(xs)
+        xs = Dropout(0.5)(xs)
+        # Output
+        result = Dense(1, activation='sigmoid')(xs)
+        # Define the model input & output
+        model = Model(inputs=seq_input, outputs=result)
+        return model
 
 
 class ConvModel:
@@ -50,10 +117,13 @@ class ConvModel:
         print self.mp
 
         if self.mp == 'True':
-            # If pooling is turned on
-            xs = Conv1D(filters=self.conv_filters, kernel_size=self.conv_kernel_size,
-                        padding='same', name='convolution1')(seq_input)
-            xs = Activation('relu')(xs)
+            for idx in range(self.conv_layers):
+                # Adding in convolution layers
+                layer_name = 'convolution' + str(idx + 1)
+                xs = Conv1D(filters=self.conv_filters, kernel_size=self.conv_kernel_size,
+                            padding='same', name=layer_name)(seq_input)
+                xs = Activation('relu')(xs)
+                xs = MaxPooling1D(padding='same', strides=15, pool_size=15)(xs)
 
         else:
             for idx in range(self.conv_layers):
@@ -175,13 +245,15 @@ def fit_model(model_type, dat, labels, batch_size, seq_length, mp):
         dense_nodes = [32, 64, 128]
         rnf_filters = [6, 12, 24]
         rnf_kernel_size = [6, 12, 16, 24]
+        rnf_dim = [1, 2, 4]
         params = []
-        for parameters in [conv_filters, conv_kernel_size, dense_nodes, rnf_filters, rnf_kernel_size]:
+        for parameters in [conv_filters, conv_kernel_size, dense_nodes, rnf_filters, rnf_kernel_size, rnf_dim]:
             options = len(parameters)
             rnum = np.random.choice(options)
             params.append(parameters[rnum])
-        architecture = RNF(seq_length=seq_length, conv_filters=params[0], conv_kernel_size=params[1], dense_nodes=params[2],
-                           rnf_filters=params[3], rnf_kernel_size=params[4])
+        architecture = RnfFast(seq_length=seq_length, conv_filters=params[0], conv_kernel_size=params[1],
+                               dense_nodes=params[2], rnf_filters=params[3], rnf_kernel_size=params[4],
+                               rnf_dim=params[5])
         model = architecture.rnf_model()
 
     # Splitting data into test and train
