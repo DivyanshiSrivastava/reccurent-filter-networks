@@ -1,3 +1,8 @@
+"""
+Apply recurrent neural filters to DNA sequence data.
+This implementation uses Tensorflow and Keras.
+"""
+
 import numpy as np
 import keras
 import argparse
@@ -23,17 +28,16 @@ from simulatedata import TrainingData, TestData
 
 
 def make_onehot(buf, seq_length):
-
     fd = {'A': [1, 0, 0, 0], 'T': [0, 1, 0, 0],
           'G': [0, 0, 1, 0], 'C': [0, 0, 0, 1],
           'N': [0, 0, 0, 0]}
-
     one_hot = [fd[base] for seq in buf for base in seq]
     one_hot_np = np.reshape(one_hot, (-1, seq_length, 4))
     return one_hot_np
 
 
-# This class is adapted from: https://github.com/bloomberg/cnn-rnf/blob/master/cnn_keras.py
+# This class is adapted from:
+# https://github.com/bloomberg/cnn-rnf/blob/master/cnn_keras.py
 class DistInputLayer(Layer):
     """
         Distribute word vectors into chunks - input for the convolution operation
@@ -48,7 +52,7 @@ class DistInputLayer(Layer):
 
     def call(self, x):
         chunks = []
-        print self.seq_len - self.filter_width + 1
+        print(self.seq_len - self.filter_width + 1)
         for start_idx in range(self.seq_len - self.filter_width + 1):
             chunk = x[:, start_idx: start_idx + self.filter_width]
             chunk = K.expand_dims(chunk, 1)
@@ -114,7 +118,7 @@ class ConvModel:
 
         assert self.conv_layers > 0
 
-        print self.mp
+        print(self.mp)
 
         if self.mp == 'True':
             for idx in range(self.conv_layers):
@@ -182,18 +186,19 @@ class RNF:
             # Defining a 'valid' convolution here:
             while start_idx + size < self.seq_length:
                 sliced_input = self.slice_input(start_idx, start_idx + size)(seq_input)
-                print sliced_input.shape
+                print(sliced_input.shape)
                 input_chunks.append(sliced_input)
                 start_idx += step
 
             input_chunks = keras.layers.concatenate(input_chunks, axis=1)
-            print input_chunks.shape
+            print(input_chunks.shape)
 
             dim_0_size = self.seq_length - self.rnf_kernel_size
             input_chunks = Reshape((dim_0_size, self.rnf_kernel_size, 4))(input_chunks)
-            print input_chunks.shape
+            print(input_chunks.shape)
             xs = TimeDistributed(shared_layer)(input_chunks)
-            print xs.shape
+
+            print(xs.shape)
             return xs
 
         filter_outs = []
@@ -221,7 +226,6 @@ class RNF:
 
 
 def fit_model(model_type, dat, labels, batch_size, seq_length, mp):
-
     if model_type == 'conv':
         # choose the parameters here:
         conv_layers = range(2, 10)  # Cause 1 is already for the MP case.
