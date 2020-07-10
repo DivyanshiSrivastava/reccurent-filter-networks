@@ -6,10 +6,14 @@ This implementation uses Tensorflow and Keras.
 import numpy as np
 import keras
 import argparse
+import os, sys
+from subprocess import call
 
 # sk-learn imports
 from sklearn.metrics import average_precision_score as auprc
 import sklearn
+import sklearn.metrics
+from sklearn.metrics import roc_auc_score
 
 # keras imports
 from keras.callbacks import ModelCheckpoint
@@ -107,6 +111,10 @@ class RecurrentNeuralFilters:
         # The TimeDistributed Layer treats index 1 in this input as \
         # independent time steps.
         # So here, the same GRU is being applied to every chunk.
+
+        print('RNF_kernel_size: {}'.format(self.rnf_kernel_size))
+        print('RNF_dimension: {}'.format(self.rnf_dim))
+
         xs = TimeDistributed(GRU(self.rnf_dim))(chunked_input)
         xs = Activation('relu')(xs)
         # Shape:(?, L-F+1, RNF_DIM) # Note here, the LSTM is producing
@@ -115,7 +123,10 @@ class RecurrentNeuralFilters:
         xs = MaxPooling1D(pool_size=8, strides=4)(xs)
         print(xs.shape)
         # Adding Dense Layers.
+        xs = Flatten()(xs)
+        print(xs.shape)
         xs = Dense(128, activation='relu')(xs)
+        print(xs.shape)
         xs = Dense(128, activation='relu')(xs)
         result = Dense(1, activation='sigmoid')(xs)
         # Define the model input & output
@@ -142,7 +153,7 @@ class Train:
     """
 
     def __init__(self, training_data_path, val_data_path, test_data_path,
-                 records_path, batchsize, seq_len):
+                 records_path, batchsize, seq_len, val_batchsize):
 
         # input/output paths
         self.training_data_path = training_data_path
@@ -153,6 +164,7 @@ class Train:
         # other model parameters
         self.batchsize = batchsize
         self.seq_len = seq_len
+        self.val_batchsize = val_batchsize
 
     def train_generator(self, path):
         X = iu.train_generator(path + ".seq",
@@ -164,10 +176,10 @@ class Train:
 
     def val_or_test_generator(self, path):
         X = iu.train_generator(path + ".seq",
-                               self.batchsize, self.seq_len, 'seq',
+                               self.val_batchsize, self.seq_len, 'seq',
                                'non-repeating')
         y = iu.train_generator(path + ".labels",
-                               self.batchsize, self.seq_len, 'labels',
+                               self.val_batchsize, self.seq_len, 'labels',
                                'non-repeating')
         while True:
             yield X.next(), y.next()
@@ -220,7 +232,7 @@ class Train:
         precision_recall_history = MeasurePR()
         # processing the generators
         train_generator = self.train_generator(self.training_data_path)
-        val_generator = self.val_or_test_generator(self.val_data_path)
+        val_data = self.val_or_test_generator(self.val_data_path).next()
 
         # calculating steps.
         training_set_size = len(np.loadtxt(self.training_data_path + '.labels'))
@@ -229,7 +241,7 @@ class Train:
 
         hist = model.fit_generator(epochs=10, steps_per_epoch=steps,
                                    generator=train_generator,
-                                   validation_data=val_generator,
+                                   validation_data=val_data,
                                    callbacks=[checkpointer, precision_recall_history])
 
         loss, val_pr = self.save_metrics(hist, precision_recall_history)
@@ -266,10 +278,9 @@ class Evaluate:
 
         # Calculate auROC
 
-        roc_auc = sklearn.metrics.roc_auc_score(test_labels, probabilities)
+        roc_auc = roc_auc_score(test_labels, probabilities)
         # Calculate auPRC
-        prc_auc = sklearn.metrics.average_precision_score(test_labels,
-                                                          probabilities)
+        prc_auc = auprc(test_labels, probabilities)
         self.records_path.write('')
         # Write auROC and auPRC to records file.
         self.records_path.write("AUC ROC:{0}\n".format(roc_auc))
@@ -284,14 +295,19 @@ def main():
     parser.add_argument('test_data_path')
     parser.add_argument('seq_len')
     parser.add_argument('batchsize')
+    parser.add_argument('val_size')
     parser.add_argument('outfile', help='outfile with model performance metrics')
 
     args = parser.parse_args()
+    # Create output directory:
+    outdir = args.outfile
+    call(['mkdir', outdir])
 
     tr = Train(args.training_data_path, args.validation_data_path,
-               args.test_data_path, args.outfile, args.batchsize, args.seq_len)
+               args.test_data_path, args.outfile, int(args.batchsize),
+               int(args.seq_len), int(args.val_size))
     _, _, model = tr.fit_model()
-    te = Evaluate(model, args.batchsize, args.seq_len,
+    te = Evaluate(model, args.batchsize, int(args.seq_len),
                   args.test_data_path, args.outfile)
     te.evaluate()
 
