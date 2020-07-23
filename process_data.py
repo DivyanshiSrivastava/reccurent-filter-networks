@@ -17,9 +17,7 @@ What data does this script take as input or require?
 """
 
 import numpy as np
-import sys
 import pandas as pd
-import pybedtools
 import pyfasta
 
 from pybedtools import Interval, BedTool
@@ -44,6 +42,13 @@ class Construct:
         This function parses this file, and saves the resulting intervals file
         as a BedTools object.
         "Random" contigs, chrUns and chrMs are filtered out.
+
+        Parameters:
+            genome_sizes_file (str): (Is in an input to the class,
+            can be downloaded from UCSC genome browser)
+        Returns:
+            A BedTools (from pybedtools) object containing all the chromosomes,
+            start (0) and stop (chromosome size) positions
         """
 
         genome_sizes = pd.read_csv(self.genome_sizes_file, sep='\t',
@@ -54,15 +59,35 @@ class Construct:
         genome_sizes_filt = genome_sizes_filt[~genome_sizes_filt['chr'].str.contains('chrUn')]
         genome_sizes_filt = genome_sizes_filt[~genome_sizes_filt['chr'].str.contains('chrM')]
 
-        print(genome_sizes_filt)
-
         genome_bed_data = []
         for chrom, sizes in genome_sizes_filt.values:
             genome_bed_data.append(Interval(chrom, 0, sizes))
         genome_bed_data = BedTool(genome_bed_data)
         print(genome_bed_data)
+        return genome_bed_data
 
+    def get_genome_fasta(self):
+        f = pyfasta.Fasta(self.genome_fasta_file)
+        return f
 
+    def define_coordinates(self, ratio=2):
+        """
+        Use the chip-seq peak file and the blacklist files to define a bound
+        set and an unbound set of sites. The ratio of bound to unbound is 1:2,
+        but can be controlled using the parameter "ratio".
+
+        The unbound/negative set is chosen randomly from the genome.
+        :return:
+        """
+        pass
+
+    def get_data_at_coordinates(self):
+        pass
+
+## Pseudo code:
+## Run: define coordinates
+## get_data_at coordinates.
+## Wrap this in an iterator.
 
 construct_data = Construct('/Users/asheesh/Desktop/mm10.sizes', 1, 2, 3)
 construct_data.get_genome_sizes()
