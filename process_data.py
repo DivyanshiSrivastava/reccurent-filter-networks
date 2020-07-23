@@ -89,6 +89,7 @@ class Construct:
 ## get_data_at coordinates.
 ## Wrap this in an iterator.
 
+
 construct_data = Construct('/Users/asheesh/Desktop/mm10.sizes', 1, 2, 3)
 construct_data.get_genome_sizes()
 
