@@ -22,6 +22,7 @@ import pyfasta
 
 from pybedtools import Interval, BedTool
 
+
 class AccessGenome:
     def __init__(self, genome_sizes_file, genome_fasta_file):
         self.genome_sizes_file = genome_sizes_file
@@ -66,37 +67,62 @@ class AccessGenome:
         return f
 
 
+def load_chipseq_data(chip_peaks_file):
+    """
+    Loads the ChIP-seq peaks data.
+    The chip peaks file is a tab seperated bed file:
+    chr1    1   150
+    chr2    2   350
+    ...
+    chrX    87  878
+    This file can be constructed using a any peak-caller. We use multiGPS.
+    Also constructs a BedTools object which can be later used to generate
+    negative sets.
+
+    """
+    chip_seq_data = pd.read_csv(chip_peaks_file, sep='\t',
+                                header=None,
+                                names=['chr', 'start', 'end', 'caller',
+                                       'score'])
+    # also constructing a BedTools object, to intersect with negative data.
+    chip_seq_bedtools_obj = BedTool(chip_peaks_file)
+    return chip_seq_data, chip_seq_bedtools_obj
+
+
+def exclusion_regions(blacklist_file, chip_seq_data):
+    """
+    This function takes as input a bound bed file (from multiGPS).
+    The assumption is that the bed file reports the peak center
+    For example: chr2   45  46
+    It converts these peak centers into 501 base pair windows, and adds them to
+    the exclusion list which will be used when constructing negative sets.
+    It also adds the mm10 blacklisted windows to the exclusion list.
+
+    Parameters:
+        blacklist_file (str): Path to the blacklist file.
+        chip_seq_data (dataFrame): The pandas chip-seq data loaded by load_chipseq_data
+    Returns:
+         exclusion_windows (BedTool): A bedtools object containing exclusion windows.
+    """
+    chip_seq_data['start'] = chip_seq_data['start'] - 250
+    chip_seq_data['end'] = chip_seq_data['end'] + 250
+    bound_exclusion_windows = BedTool.from_dataframe(chip_seq_data[['chr', 'start','end']])
+    blacklist_exclusion_windows = BedTool(blacklist_file)
+    exclusion_windows = BedTool.cat(
+        *[blacklist_exclusion_windows, bound_exclusion_windows])
+    return exclusion_windows
+
+
 class ConstructTrainingSets(AccessGenome):
 
     def __init__(self, genome_sizes_file, genome_fasta_file, blacklist_file,
-                 chip_peaks_file, window_length):
+                 chip_coords, window_length):
         super().__init__(genome_sizes_file, genome_fasta_file)
         self.blacklist_file = blacklist_file
-        self.chip_peaks_file = chip_peaks_file
+        self.chip_coords = chip_coords
         self.L = window_length
 
-    def load_chipseq_data(self):
-        """
-        Loads the ChIP-seq peaks data.
-        The chip peaks file is a tab seperated bed file:
-        chr1    1   150
-        chr2    2   350
-        ...
-        chrX    87  878
-        This file can be constructed using a any peak-caller. We use multiGPS.
-        Also constructs a BedTools object which can be later used to generate
-        negative sets.
-
-        """
-        chip_seq_data = pd.read_csv(self.chip_peaks_file, sep='\t',
-                                    header=None,
-                                    names=['chr', 'start', 'end', 'caller',
-                                           'score'])
-        # also constructing a BedTools object, to intersect with negative data.
-        chip_seq_bedtools_obj = BedTool(self.chip_peaks_file)
-        return chip_seq_data, chip_seq_bedtools_obj
-
-    def shift_windows(self, coords):
+    def apply_random_shift(self):
         """
         This function takes as input a set of bed co-ordinates
         It finds the mid-point for each record or Interval in the bed file,
@@ -128,11 +154,11 @@ class ConstructTrainingSets(AccessGenome):
         # defining the random shift
         low = int(-self.L/2 + 25)
         high = int(self.L/2 - 25)
-        coords['random_shift'] = np.random.randint(low=low, high=high,
-                                                   size=len(coords))
-        coords['shifted_start'] = coords['start'] + coords['random_shift'] - int(self.L/2)
-        coords['shifted_end'] = coords['start'] + coords['random_shift'] + int(self.L/2)
-        return coords
+        self.chip_coords['random_shift'] = np.random.randint(low=low, high=high,
+                                                   size=len(self.chip_coords))
+        self.chip_coords['shifted_start'] = self.chip_coords['start'] + self.chip_coords['random_shift'] - int(self.L/2)
+        self.chip_coords['shifted_end'] = self.chip_coords['start'] + self.chip_coords['random_shift'] + int(self.L/2)
+        return self.chip_coords
 
     def define_coordinates(self):
         """
@@ -159,13 +185,30 @@ class ConstructTrainingSets(AccessGenome):
 
         # very very cool pybedtools functionality here!
         positive_bedtools_obj = BedTool.from_dataframe(shifted_coords)
-        print(positive_bedtools_obj)
+        # print(positive_bedtools_obj)
+        shifted_coords['label'] = 1
 
-        # constructing a negative set.
-        # negative_bed = positive_bedtools_obj.shuffle()
+
+        # Note: with the include here make sure you include
+        # the training chromosomes only.
+        negative_bedtools_obj = BedTool.shuffle(positive_bedtools_obj,
+                                       g=self.genome_sizes_file,
+                                       excl=exclusion_windows.fn)
+        negative_coords = negative_bedtools_obj.to_dataframe()
+        negative_coords['label'] = 0
+        negative_coords.columns = ['chr', 'shifted_start', 'shifted_end', 'label']
+
+
+        # Mixing and shuffling positive and negative set:
+        training_coords = pd.concat([shifted_coords, negative_coords])
+        print(training_coords)
+        # randomly shuffle the dataframe
+        print(training_coords.sample(frac=1))
+
 
 
         # generating a random negative set:
+
         
 
         # removing any bound windows from the negative set:
@@ -185,11 +228,12 @@ class ConstructTrainingSets(AccessGenome):
 mm10_sizes = '/Users/asheesh/Desktop/RNFs/mm10.sizes'
 mm10_fa = '/Users/asheesh/Desktop/RNFs/mm10.fa'
 peaks = '/Users/asheesh/Desktop/RNFs/Ascl1_Ascl1.bed'
+mm10_blacklist = '/Users/asheesh/Desktop/RNFs/mm10_blacklist.bed'
 
 construct_sets = ConstructTrainingSets(genome_sizes_file=mm10_sizes,
                                genome_fasta_file=mm10_fa,
-                               blacklist_file='x',
-                               chip_peaks_file=peaks,window_length=200)
+                               blacklist_file=mm10_blacklist,
+                               chip_peaks_file=peaks, window_length=200)
 
 construct_sets.define_coordinates()
 
