@@ -19,55 +19,48 @@ What data does this script take as input or require?
 import numpy as np
 import pandas as pd
 import pyfasta
+import timeit
 
 from pybedtools import Interval, BedTool
+import sklearn.preprocessing
 
 
-class AccessGenome:
-    def __init__(self, genome_sizes_file, genome_fasta_file):
-        self.genome_sizes_file = genome_sizes_file
-        self.genome_fasta_file = genome_fasta_file
+def get_genome_sizes(genome_sizes_file, to_filter):
+    """
+    Loads the genome sizes file which should look like this:
+    chr1    45900011
+    chr2    10001401
+    ...
+    chrX    9981013
 
-    def get_genome_sizes(self):
-        """
-        Loads the genome sizes file which should look like this:
-        chr1    45900011
-        chr2    10001401
-        ...
-        chrX    9981013
+    This function parses this file, and saves the resulting intervals file
+    as a BedTools object.
+    "Random" contigs, chrUns and chrMs are filtered out.
 
-        This function parses this file, and saves the resulting intervals file
-        as a BedTools object.
-        "Random" contigs, chrUns and chrMs are filtered out.
+    Parameters:
+        genome_sizes_file (str): (Is in an input to the class,
+        can be downloaded from UCSC genome browser)
+        to_filter (list): A list of chromosomes to be filtered out for training
+        This will include all test and validation chromosomes.
+    Returns:
+        A BedTools (from pybedtools) object containing all the chromosomes,
+        start (0) and stop (chromosome size) positions
+    """
 
-        Parameters:
-            genome_sizes_file (str): (Is in an input to the class,
-            can be downloaded from UCSC genome browser)
-        Returns:
-            A BedTools (from pybedtools) object containing all the chromosomes,
-            start (0) and stop (chromosome size) positions
-        """
+    genome_sizes = pd.read_csv(genome_sizes_file, sep='\t',
+                               header=None, names=['chr', 'length'])
+    # filter out chromosomes from the to_filter list:
+    for chromosome in to_filter:
+        genome_sizes = genome_sizes[~genome_sizes['chr'].str.contains(chromosome)]
 
-        genome_sizes = pd.read_csv(self.genome_sizes_file, sep='\t',
-                                   header=None, names=['chr', 'length'])
-        # filter out chromosomes with "random" contigs
-        genome_sizes_filt = genome_sizes[~genome_sizes['chr'].str.contains('random')]
-        # filter out chromosomes with "chrUn" and "chrM"
-        genome_sizes_filt = genome_sizes_filt[~genome_sizes_filt['chr'].str.contains('chrUn')]
-        genome_sizes_filt = genome_sizes_filt[~genome_sizes_filt['chr'].str.contains('chrM')]
-
-        genome_bed_data = []
-        for chrom, sizes in genome_sizes_filt.values:
-            genome_bed_data.append(Interval(chrom, 0, sizes))
-        genome_bed_data = BedTool(genome_bed_data)
-        return genome_bed_data
-
-    def get_genome_fasta(self):
-        f = pyfasta.Fasta(self.genome_fasta_file)
-        return f
+    genome_bed_data = []
+    for chrom, sizes in genome_sizes.values:
+        genome_bed_data.append(Interval(chrom, 0, sizes))
+    genome_bed_data = BedTool(genome_bed_data)
+    return genome_bed_data
 
 
-def load_chipseq_data(chip_peaks_file):
+def load_chipseq_data(chip_peaks_file, to_filter):
     """
     Loads the ChIP-seq peaks data.
     The chip peaks file is a tab seperated bed file:
@@ -84,9 +77,10 @@ def load_chipseq_data(chip_peaks_file):
                                 header=None,
                                 names=['chr', 'start', 'end', 'caller',
                                        'score'])
-    # also constructing a BedTools object, to intersect with negative data.
-    chip_seq_bedtools_obj = BedTool(chip_peaks_file)
-    return chip_seq_data, chip_seq_bedtools_obj
+    # removing all test and validation chromosomes.
+    for chromosome in to_filter:
+        chip_seq_data = chip_seq_data[~chip_seq_data['chr'].str.contains(chromosome)]
+    return chip_seq_data
 
 
 def exclusion_regions(blacklist_file, chip_seq_data):
@@ -102,7 +96,7 @@ def exclusion_regions(blacklist_file, chip_seq_data):
         blacklist_file (str): Path to the blacklist file.
         chip_seq_data (dataFrame): The pandas chip-seq data loaded by load_chipseq_data
     Returns:
-         exclusion_windows (BedTool): A bedtools object containing exclusion windows.
+        exclusion_windows (BedTool): A bedtools object containing exclusion windows.
     """
     chip_seq_data['start'] = chip_seq_data['start'] - 250
     chip_seq_data['end'] = chip_seq_data['end'] + 250
@@ -113,16 +107,39 @@ def exclusion_regions(blacklist_file, chip_seq_data):
     return exclusion_windows
 
 
+class AccessGenome:
+    def __init__(self, genome_fasta_file):
+        self.genome_fasta_file = genome_fasta_file
+
+    def get_genome_fasta(self):
+        f = pyfasta.Fasta(self.genome_fasta_file)
+        return f
+
+
 class ConstructTrainingSets(AccessGenome):
 
     def __init__(self, genome_sizes_file, genome_fasta_file, blacklist_file,
-                 chip_coords, window_length):
-        super().__init__(genome_sizes_file, genome_fasta_file)
+                 chip_coords, window_length, exclusion_btd_obj,
+                 train_genome_bed):
+        super().__init__(genome_fasta_file)
+        self.genome_sizes_file = genome_sizes_file
         self.blacklist_file = blacklist_file
         self.chip_coords = chip_coords
+        # note:
+        # chip_coords is a filtered file, excluding test & val chromosomes.
         self.L = window_length
+        self.exclusion_bdt_obj = exclusion_btd_obj
+        self.train_genome_bed = train_genome_bed
+        self.batch_size = 100
 
-    def apply_random_shift(self):
+    def get_onehot_array(self, seqs):
+        onehot_map = {'A': [1, 0, 0, 0], 'T': [0, 1, 0, 0], 'G': [0, 0, 0, 1],
+                      'C': [0, 0, 0, 1], 'N': [0, 0, 0, 0]}
+        # note: converting all lower-case nucleotides into upper-case here.
+        onehot_seqs = [onehot_map[x.upper()] for seq in seqs for x in seq]
+        return np.array(onehot_seqs).reshape((self.batch_size, self.L, 4))
+
+    def apply_random_shift(self, coords):
         """
         This function takes as input a set of bed co-ordinates
         It finds the mid-point for each record or Interval in the bed file,
@@ -149,16 +166,21 @@ class ConstructTrainingSets(AccessGenome):
         Parameters:
             coords(pandas dataFrame): This is an input bedfile
         Returns:
-            coords(pandas dataFrame): The output bedfile with shifted coords
+            shifted_coords(pandas dataFrame): The output bedfile with shifted coords
         """
         # defining the random shift
         low = int(-self.L/2 + 25)
         high = int(self.L/2 - 25)
-        self.chip_coords['random_shift'] = np.random.randint(low=low, high=high,
-                                                   size=len(self.chip_coords))
-        self.chip_coords['shifted_start'] = self.chip_coords['start'] + self.chip_coords['random_shift'] - int(self.L/2)
-        self.chip_coords['shifted_end'] = self.chip_coords['start'] + self.chip_coords['random_shift'] + int(self.L/2)
-        return self.chip_coords
+        coords['random_shift'] = np.random.randint(low=low, high=high,
+                                                   size=len(coords))
+        coords['s_start'] = coords['start'] + coords['random_shift'] - int(self.L/2)
+        coords['s_end'] = coords['start'] + coords['random_shift'] + int(self.L/2)
+
+        # making a new dataFrame containing the new shifted coords.
+        shifted_coords = coords[['chr', 's_start', 's_end']]
+        shifted_coords.columns = ['chr', 'start', 'end']
+
+        return shifted_coords
 
     def define_coordinates(self):
         """
@@ -168,74 +190,93 @@ class ConstructTrainingSets(AccessGenome):
 
         The unbound/negative set is chosen randomly from the genome.
         """
-        # CHANGE THIS SO THAT YOU CAN PASS GENOME BED COORDS
-        # INSTEAD OF CALLING IT OVER AND OVER
-        chip_seq_data, chip_bedtools = self.load_chipseq_data()
-        genome_bed_coords = super(ConstructTrainingSets, self).get_genome_sizes()
         batch_size = 100
-        # note: genome_bed_coords is an instance of the pybedtools BedTool class
+        positive_sample_size = int(batch_size/2)
 
-        # constructing a positive mini-batch from chip peaks file
-        positive_set_size = int(batch_size/2)
-        bound_indices = np.random.randint(low=0, high=len(chip_seq_data), size=positive_set_size)
-        bound_bed = chip_seq_data.iloc[bound_indices]
-        bound_bed = bound_bed.iloc[:, 0:3]  # extracting first 3 bed columns.
-        shifted_coords = self.shift_windows(bound_bed)
-        shifted_coords = shifted_coords[['chr', 'shifted_start', 'shifted_end']]
+        # taking a sample from the chip_coords file,
+        # i.e. sub-setting 50 rows from self.chip_coords
+        positive_sample = self.chip_coords.sample(n=positive_sample_size)
+        # taking only the first three columns
+        # (removing multiGPS scores & caller names)
+        positive_sample = positive_sample.iloc[:, 0:3]
+        # applying a random shift that returns 200 bp windows.
+        positive_sample_w_shift = self.apply_random_shift(positive_sample)
+        # creating a BedTool object for further use:
+        positive_sample_bdt_obj = BedTool.from_dataframe(positive_sample_w_shift)
 
-        # very very cool pybedtools functionality here!
-        positive_bedtools_obj = BedTool.from_dataframe(shifted_coords)
-        # print(positive_bedtools_obj)
-        shifted_coords['label'] = 1
+        negative_sample_bdt_obj = BedTool.shuffle(positive_sample_bdt_obj,
+                                                  g=self.genome_sizes_file,
+                                                  incl=self.train_genome_bed.fn,
+                                                  excl=self.exclusion_bdt_obj.fn)
+        negative_sample = negative_sample_bdt_obj.to_dataframe()
+        negative_sample.columns = ['chr', 'start', 'end'] # naming such that the
+        # column names are consistent with positive_samples
 
+        # adding in labels:
+        positive_sample_w_shift['label'] = 1
+        negative_sample['label'] = 0
 
-        # Note: with the include here make sure you include
-        # the training chromosomes only.
-        negative_bedtools_obj = BedTool.shuffle(positive_bedtools_obj,
-                                       g=self.genome_sizes_file,
-                                       excl=exclusion_windows.fn)
-        negative_coords = negative_bedtools_obj.to_dataframe()
-        negative_coords['label'] = 0
-        negative_coords.columns = ['chr', 'shifted_start', 'shifted_end', 'label']
-
-
-        # Mixing and shuffling positive and negative set:
-        training_coords = pd.concat([shifted_coords, negative_coords])
-        print(training_coords)
-        # randomly shuffle the dataframe
-        print(training_coords.sample(frac=1))
-
-
-
-        # generating a random negative set:
-
-        
-
-        # removing any bound windows from the negative set:
-
-
-        # joining the 2 sets.
-
-
-        # shuffling and returning:
+        # mixing and shuffling positive and negative set:
+        training_coords = pd.concat([positive_sample_w_shift, negative_sample])
+        # randomly shuffle the dataFrame
+        training_coords = training_coords.sample(frac=1)
+        return training_coords
 
     def get_data_at_coordinates(self):
-        # genome_fasta = super(ConstructSets, self).get_genome_fasta()
-        # print(genome_fasta['chr1'][1:10])
-        pass
+        training_batch = self.define_coordinates()
+        genome_fasta = super(ConstructTrainingSets, self).get_genome_fasta()
+
+        batch_y = training_batch['label']
+        batch_X = []
+        for chrom, start, stop, y in training_batch.values:
+            batch_X.append(genome_fasta[chrom][int(start):int(stop)])
+        # converting this data into onehot
+        batch_X_onehot = self.get_onehot_array(batch_X)
+        print(batch_X_onehot.shape)
+        print(batch_X_onehot[1])
+        return batch_X_onehot, batch_y
 
 
 mm10_sizes = '/Users/asheesh/Desktop/RNFs/mm10.sizes'
 mm10_fa = '/Users/asheesh/Desktop/RNFs/mm10.fa'
-peaks = '/Users/asheesh/Desktop/RNFs/Ascl1_Ascl1.bed'
+peaks_file = '/Users/asheesh/Desktop/RNFs/Ascl1_Ascl1.bed'
 mm10_blacklist = '/Users/asheesh/Desktop/RNFs/mm10_blacklist.bed'
 
-construct_sets = ConstructTrainingSets(genome_sizes_file=mm10_sizes,
-                               genome_fasta_file=mm10_fa,
-                               blacklist_file=mm10_blacklist,
-                               chip_peaks_file=peaks, window_length=200)
 
-construct_sets.define_coordinates()
+def train_generator():
+    # load the genome_sizes_file:
+    genome_bed_train = get_genome_sizes(mm10_sizes, to_filter=['chr10', 'chr17',
+                                                               'chrUn', 'chrM',
+                                                               'random'])
+    # loading the chip-seq bed file
+    chip_seq_coordinates = load_chipseq_data(peaks_file,
+                                             to_filter=['chr10', 'chr17', 'chrUn',
+                                                        'chrM', 'random'])
+    # loading the exclusion co-ords:
+    exclusion_windows_bdt = exclusion_regions(mm10_blacklist, chip_seq_coordinates)
+    # constructing the training set
+    construct_training_sets = ConstructTrainingSets(genome_sizes_file=mm10_sizes,
+                                                    genome_fasta_file=mm10_fa,
+                                                    blacklist_file=mm10_blacklist,
+                                                    chip_coords=chip_seq_coordinates,
+                                                    exclusion_btd_obj=exclusion_windows_bdt,
+                                                    window_length=200,
+                                                    train_genome_bed=genome_bed_train)
+    construct_training_sets.get_data_at_coordinates()
+
+train_generator()
+
+#construct_validation_sets = ConstructTrainingSets(genome_sizes_file=mm10_sizes,
+#                                                  genome_fasta_file=mm10_fa,
+#                                                  blacklist_file=mm10_blacklist,
+#                                                  chip_coords="chip_seq_coordinates_VAL",
+#                                                  exclusion_btd_obj=exclusion_windows_bdt,
+#                                                  window_length=200,
+#                                                  train_genome_bed="VAL")
+
+
+
+
 
 
 
