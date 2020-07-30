@@ -1,7 +1,7 @@
 """
 Utilities for iterating constructing data sets and iterating over
 DNA sequence data.
-Some ideas and pybedtools code from:
+Pybedtools code from:
 https://github.com/uci-cbcl/FactorNet/blob/master/utils.py
 Pseudo code structure:
 1. Construct a random training set (start with a random negative,
@@ -19,13 +19,11 @@ What data does this script take as input or require?
 import numpy as np
 import pandas as pd
 import pyfasta
-import timeit
 
 from pybedtools import Interval, BedTool
-import sklearn.preprocessing
 
 
-def get_genome_sizes(genome_sizes_file, to_filter):
+def get_genome_sizes(genome_sizes_file, to_filter=None, to_keep=None):
     """
     Loads the genome sizes file which should look like this:
     chr1    45900011
@@ -40,18 +38,36 @@ def get_genome_sizes(genome_sizes_file, to_filter):
     Parameters:
         genome_sizes_file (str): (Is in an input to the class,
         can be downloaded from UCSC genome browser)
+
         to_filter (list): A list of chromosomes to be filtered out for training
         This will include all test and validation chromosomes.
+        Default: None, this condition will not be triggered unless a list
+        is supplied.
+
+        to_keep (list): A list of chromosomes to be kept.
+
     Returns:
         A BedTools (from pybedtools) object containing all the chromosomes,
         start (0) and stop (chromosome size) positions
     """
-
     genome_sizes = pd.read_csv(genome_sizes_file, sep='\t',
                                header=None, names=['chr', 'length'])
-    # filter out chromosomes from the to_filter list:
-    for chromosome in to_filter:
-        genome_sizes = genome_sizes[~genome_sizes['chr'].str.contains(chromosome)]
+    if to_filter:
+        # filter out chromosomes from the to_filter list:
+        for chromosome in to_filter:
+            genome_sizes = genome_sizes[~(genome_sizes['chr'] == chromosome)]
+    if to_keep:
+        # keep only the to_keep chromosomes:
+        # note: this is slightly different from to_filter, because
+        # at a time, if only one chromosome is retained, it can be used
+        # sequentially.
+        filtered_genome = []
+        for chromosome in to_keep:
+            print(chromosome)
+            filtered_record = genome_sizes[(genome_sizes['chr'] == chromosome)]
+            filtered_genome.append(filtered_record)
+        # merge the retained chromosomes
+        genome_sizes = pd.concat(filtered_genome)
 
     genome_bed_data = []
     for chrom, sizes in genome_sizes.values:
@@ -60,7 +76,7 @@ def get_genome_sizes(genome_sizes_file, to_filter):
     return genome_bed_data
 
 
-def load_chipseq_data(chip_peaks_file, to_filter):
+def load_chipseq_data(chip_peaks_file, to_filter=None, to_keep=None):
     """
     Loads the ChIP-seq peaks data.
     The chip peaks file is a tab seperated bed file:
@@ -77,9 +93,25 @@ def load_chipseq_data(chip_peaks_file, to_filter):
                                 header=None,
                                 names=['chr', 'start', 'end', 'caller',
                                        'score'])
-    # removing all test and validation chromosomes.
-    for chromosome in to_filter:
-        chip_seq_data = chip_seq_data[~chip_seq_data['chr'].str.contains(chromosome)]
+    # removing all test and validation chromosomes if to_filter != None
+    if to_filter:
+        # filter out chromosomes from the to_filter list:
+        for chromosome in to_filter:
+            chip_seq_data = chip_seq_data[~(chip_seq_data['chr'] == chromosome)]
+    # retaining only test or val chromosomes if to_keep != None
+    if to_keep:
+        # keep only the to_keep chromosomes:
+        # note: this is slightly different from to_filter, because
+        # at a time, if only one chromosome is retained, it can be used
+        # sequentially.
+        filtered_genome = []
+        for chromosome in to_keep:
+            print(chromosome)
+            filtered_record = chip_seq_data[(chip_seq_data['chr'] == chromosome)]
+            chip_seq_data.append(filtered_record)
+        # merge the retained chromosomes
+        chip_seq_data = pd.concat(filtered_genome)
+
     return chip_seq_data
 
 
@@ -116,11 +148,11 @@ class AccessGenome:
         return f
 
 
-class ConstructTrainingSets(AccessGenome):
+class ConstructSets(AccessGenome):
 
     def __init__(self, genome_sizes_file, genome_fasta_file, blacklist_file,
                  chip_coords, window_length, exclusion_btd_obj,
-                 train_genome_bed):
+                 curr_genome_bed):
         super().__init__(genome_fasta_file)
         self.genome_sizes_file = genome_sizes_file
         self.blacklist_file = blacklist_file
@@ -129,7 +161,7 @@ class ConstructTrainingSets(AccessGenome):
         # chip_coords is a filtered file, excluding test & val chromosomes.
         self.L = window_length
         self.exclusion_bdt_obj = exclusion_btd_obj
-        self.train_genome_bed = train_genome_bed
+        self.curr_genome_bed = curr_genome_bed
         self.batch_size = 100
 
     def get_onehot_array(self, seqs):
@@ -190,8 +222,7 @@ class ConstructTrainingSets(AccessGenome):
 
         The unbound/negative set is chosen randomly from the genome.
         """
-        batch_size = 100
-        positive_sample_size = int(batch_size/2)
+        positive_sample_size = int(self.batch_size/2)
 
         # taking a sample from the chip_coords file,
         # i.e. sub-setting 50 rows from self.chip_coords
@@ -206,7 +237,7 @@ class ConstructTrainingSets(AccessGenome):
 
         negative_sample_bdt_obj = BedTool.shuffle(positive_sample_bdt_obj,
                                                   g=self.genome_sizes_file,
-                                                  incl=self.train_genome_bed.fn,
+                                                  incl=self.curr_genome_bed.fn,
                                                   excl=self.exclusion_bdt_obj.fn)
         negative_sample = negative_sample_bdt_obj.to_dataframe()
         negative_sample.columns = ['chr', 'start', 'end'] # naming such that the
@@ -223,8 +254,14 @@ class ConstructTrainingSets(AccessGenome):
         return training_coords
 
     def get_data_at_coordinates(self):
+        """
+        Both X and y are numpy arrays.
+        X shape: (batch size, L, 4)
+        y shape: (batch size,)
+        :return:
+        """
         training_batch = self.define_coordinates()
-        genome_fasta = super(ConstructTrainingSets, self).get_genome_fasta()
+        genome_fasta = super(ConstructSets, self).get_genome_fasta()
 
         batch_y = training_batch['label']
         batch_X = []
@@ -232,9 +269,7 @@ class ConstructTrainingSets(AccessGenome):
             batch_X.append(genome_fasta[chrom][int(start):int(stop)])
         # converting this data into onehot
         batch_X_onehot = self.get_onehot_array(batch_X)
-        print(batch_X_onehot.shape)
-        print(batch_X_onehot[1])
-        return batch_X_onehot, batch_y
+        return batch_X_onehot, batch_y.values
 
 
 mm10_sizes = '/Users/asheesh/Desktop/RNFs/mm10.sizes'
@@ -252,27 +287,75 @@ def train_generator():
     chip_seq_coordinates = load_chipseq_data(peaks_file,
                                              to_filter=['chr10', 'chr17', 'chrUn',
                                                         'chrM', 'random'])
-    # loading the exclusion co-ords:
+    # loading the exclusion coords:
     exclusion_windows_bdt = exclusion_regions(mm10_blacklist, chip_seq_coordinates)
     # constructing the training set
-    construct_training_sets = ConstructTrainingSets(genome_sizes_file=mm10_sizes,
-                                                    genome_fasta_file=mm10_fa,
-                                                    blacklist_file=mm10_blacklist,
-                                                    chip_coords=chip_seq_coordinates,
-                                                    exclusion_btd_obj=exclusion_windows_bdt,
-                                                    window_length=200,
-                                                    train_genome_bed=genome_bed_train)
-    construct_training_sets.get_data_at_coordinates()
+    construct_training_sets = ConstructSets(genome_sizes_file=mm10_sizes,
+                                            genome_fasta_file=mm10_fa,
+                                            blacklist_file=mm10_blacklist,
+                                            chip_coords=chip_seq_coordinates,
+                                            exclusion_btd_obj=exclusion_windows_bdt,
+                                            window_length=200,
+                                            curr_genome_bed=genome_bed_train)
+    while True:
+        X, y = construct_training_sets.get_data_at_coordinates()
+        yield X, y
 
-train_generator()
 
-#construct_validation_sets = ConstructTrainingSets(genome_sizes_file=mm10_sizes,
-#                                                  genome_fasta_file=mm10_fa,
-#                                                  blacklist_file=mm10_blacklist,
-#                                                  chip_coords="chip_seq_coordinates_VAL",
-#                                                  exclusion_btd_obj=exclusion_windows_bdt,
-#                                                  window_length=200,
-#                                                  train_genome_bed="VAL")
+def val_generator():
+    # load the genome_sizes_file:
+    genome_bed_val = get_genome_sizes(mm10_sizes, to_keep=['chr17'])
+    # loading the chip-seq bed file
+    chip_seq_coordinates = load_chipseq_data(peaks_file,
+                                             to_keep=['chr17'])
+    # loading the exclusion coords:
+    exclusion_windows_bdt = exclusion_regions(mm10_blacklist,
+                                              chip_seq_coordinates)
+    # constructing the training set
+    construct_val_sets = ConstructSets(genome_sizes_file=mm10_sizes,
+                                       genome_fasta_file=mm10_fa,
+                                       blacklist_file=mm10_blacklist,
+                                       chip_coords=chip_seq_coordinates,
+                                       exclusion_btd_obj=exclusion_windows_bdt,
+                                       window_length=200,
+                                       curr_genome_bed=genome_bed_val)
+    while True:
+        X_val, y_val = construct_val_sets.get_data_at_coordinates()
+        yield X_val, y_val
+
+
+def make_test_set(genome_sizes_file, window_len, stride, chip_peaks_file):
+    # take a certain chromosome: chr10
+    genome_sizes = pd.read_csv(genome_sizes_file, sep="\t", names=['chr', 'len'])
+    # subset the test chromosome:
+    genome_test = genome_sizes[genome_sizes['chr'] == 'chr10']
+    end_idx = genome_test.iloc[0, 1]
+    chromosome = genome_test.iloc[0, 0]
+
+    test_set = []
+    start_idx = 0
+    while start_idx + window_len < end_idx:
+        curr_interval = [chromosome, start_idx, start_idx + window_len]
+        start_idx += stride
+        test_set.append(curr_interval)
+
+    test_df = pd.DataFrame(test_set, columns=['chr', 'start', 'stop'])
+    test_bdt_obj = BedTool.from_dataframe(test_df)
+    # Labeling schema:
+    # Input in ChIP-seq files with 25 bp windows around the peak center.
+    # If 100% of peak center lies in window, label bound.
+    # If < 100% of peak center lies in the window: label ambiguous.
+    # Otherwise: label unbound.
+
+    # load chip-seq file; assign 25bp windows and convert to a bedtools object
+    chip_peaks = load_chipseq_data(chip_peaks_file=chip_peaks_file, to_keep=['chr10'])
+    print(chip_peaks)
+
+    # test_bdt_obj.intersect(chip_peaks_bdt_obj, v=True, f=0.9)
+
+
+
+make_test_set(mm10_sizes, window_len=200, stride=50, chip_peaks_file=peaks_file)
 
 
 
