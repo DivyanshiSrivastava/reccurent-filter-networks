@@ -104,13 +104,13 @@ def load_chipseq_data(chip_peaks_file, to_filter=None, to_keep=None):
         # note: this is slightly different from to_filter, because
         # at a time, if only one chromosome is retained, it can be used
         # sequentially.
-        filtered_genome = []
+        filtered_chip_data= []
         for chromosome in to_keep:
             print(chromosome)
             filtered_record = chip_seq_data[(chip_seq_data['chr'] == chromosome)]
-            chip_seq_data.append(filtered_record)
+            filtered_chip_data.append(filtered_record)
         # merge the retained chromosomes
-        chip_seq_data = pd.concat(filtered_genome)
+        chip_seq_data = pd.concat(filtered_chip_data)
 
     return chip_seq_data
 
@@ -349,9 +349,29 @@ def make_test_set(genome_sizes_file, window_len, stride, chip_peaks_file):
 
     # load chip-seq file; assign 25bp windows and convert to a bedtools object
     chip_peaks = load_chipseq_data(chip_peaks_file=chip_peaks_file, to_keep=['chr10'])
-    print(chip_peaks)
+    # note: multiGPS reports 1 bp separated start and end,
+    # centered on the ChIP-seq peak.
+    chip_peaks['start'] = chip_peaks['start'] - 12
+    chip_peaks['end'] = chip_peaks['end'] + 12
 
-    # test_bdt_obj.intersect(chip_peaks_bdt_obj, v=True, f=0.9)
+    chip_peaks = chip_peaks[['chr', 'start', 'end']]
+    chip_peaks_bdt_obj = BedTool.from_dataframe(chip_peaks)
+
+    # intersecting # CHECK
+    unbound_data = test_bdt_obj.intersect(chip_peaks_bdt_obj, v=True, f=1)
+    bound_data = test_bdt_obj.intersect(chip_peaks_bdt_obj, F=1, u=True)
+    # making data-frames
+    bound_data_df = bound_data.to_dataframe()
+    bound_data_df['label'] = 1
+    unbound_data_df = unbound_data.to_dataframe()
+    unbound_data_df['label'] = 0
+    # exiting
+    test_coords = pd.concat([bound_data, unbound_data])
+
+    # now, get data at these coordinates!
+    # pyFasta etc.
+    # Then, patty.
+
 
 
 
