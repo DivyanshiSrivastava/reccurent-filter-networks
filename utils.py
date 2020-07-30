@@ -2,11 +2,7 @@
 Utilities for iterating constructing data sets and iterating over
 DNA sequence data.
 """
-
-import numpy as np
 import pandas as pd
-import pyfasta
-
 from pybedtools import Interval, BedTool
 
 
