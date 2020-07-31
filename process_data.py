@@ -19,124 +19,10 @@ What data does this script take as input or require?
 import numpy as np
 import pandas as pd
 import pyfasta
+from pybedtools import BedTool
 
-from pybedtools import Interval, BedTool
-
-
-def get_genome_sizes(genome_sizes_file, to_filter=None, to_keep=None):
-    """
-    Loads the genome sizes file which should look like this:
-    chr1    45900011
-    chr2    10001401
-    ...
-    chrX    9981013
-
-    This function parses this file, and saves the resulting intervals file
-    as a BedTools object.
-    "Random" contigs, chrUns and chrMs are filtered out.
-
-    Parameters:
-        genome_sizes_file (str): (Is in an input to the class,
-        can be downloaded from UCSC genome browser)
-
-        to_filter (list): A list of chromosomes to be filtered out for training
-        This will include all test and validation chromosomes.
-        Default: None, this condition will not be triggered unless a list
-        is supplied.
-
-        to_keep (list): A list of chromosomes to be kept.
-
-    Returns:
-        A BedTools (from pybedtools) object containing all the chromosomes,
-        start (0) and stop (chromosome size) positions
-    """
-    genome_sizes = pd.read_csv(genome_sizes_file, sep='\t',
-                               header=None, names=['chr', 'length'])
-    if to_filter:
-        # filter out chromosomes from the to_filter list:
-        for chromosome in to_filter:
-            genome_sizes = genome_sizes[~(genome_sizes['chr'] == chromosome)]
-    if to_keep:
-        # keep only the to_keep chromosomes:
-        # note: this is slightly different from to_filter, because
-        # at a time, if only one chromosome is retained, it can be used
-        # sequentially.
-        filtered_genome = []
-        for chromosome in to_keep:
-            print(chromosome)
-            filtered_record = genome_sizes[(genome_sizes['chr'] == chromosome)]
-            filtered_genome.append(filtered_record)
-        # merge the retained chromosomes
-        genome_sizes = pd.concat(filtered_genome)
-
-    genome_bed_data = []
-    for chrom, sizes in genome_sizes.values:
-        genome_bed_data.append(Interval(chrom, 0, sizes))
-    genome_bed_data = BedTool(genome_bed_data)
-    return genome_bed_data
-
-
-def load_chipseq_data(chip_peaks_file, to_filter=None, to_keep=None):
-    """
-    Loads the ChIP-seq peaks data.
-    The chip peaks file is a tab seperated bed file:
-    chr1    1   150
-    chr2    2   350
-    ...
-    chrX    87  878
-    This file can be constructed using a any peak-caller. We use multiGPS.
-    Also constructs a BedTools object which can be later used to generate
-    negative sets.
-
-    """
-    chip_seq_data = pd.read_csv(chip_peaks_file, sep='\t',
-                                header=None,
-                                names=['chr', 'start', 'end', 'caller',
-                                       'score'])
-    # removing all test and validation chromosomes if to_filter != None
-    if to_filter:
-        # filter out chromosomes from the to_filter list:
-        for chromosome in to_filter:
-            chip_seq_data = chip_seq_data[~(chip_seq_data['chr'] == chromosome)]
-    # retaining only test or val chromosomes if to_keep != None
-    if to_keep:
-        # keep only the to_keep chromosomes:
-        # note: this is slightly different from to_filter, because
-        # at a time, if only one chromosome is retained, it can be used
-        # sequentially.
-        filtered_chip_data= []
-        for chromosome in to_keep:
-            print(chromosome)
-            filtered_record = chip_seq_data[(chip_seq_data['chr'] == chromosome)]
-            filtered_chip_data.append(filtered_record)
-        # merge the retained chromosomes
-        chip_seq_data = pd.concat(filtered_chip_data)
-
-    return chip_seq_data
-
-
-def exclusion_regions(blacklist_file, chip_seq_data):
-    """
-    This function takes as input a bound bed file (from multiGPS).
-    The assumption is that the bed file reports the peak center
-    For example: chr2   45  46
-    It converts these peak centers into 501 base pair windows, and adds them to
-    the exclusion list which will be used when constructing negative sets.
-    It also adds the mm10 blacklisted windows to the exclusion list.
-
-    Parameters:
-        blacklist_file (str): Path to the blacklist file.
-        chip_seq_data (dataFrame): The pandas chip-seq data loaded by load_chipseq_data
-    Returns:
-        exclusion_windows (BedTool): A bedtools object containing exclusion windows.
-    """
-    chip_seq_data['start'] = chip_seq_data['start'] - 250
-    chip_seq_data['end'] = chip_seq_data['end'] + 250
-    bound_exclusion_windows = BedTool.from_dataframe(chip_seq_data[['chr', 'start','end']])
-    blacklist_exclusion_windows = BedTool(blacklist_file)
-    exclusion_windows = BedTool.cat(
-        *[blacklist_exclusion_windows, bound_exclusion_windows])
-    return exclusion_windows
+# local imports
+import utils
 
 
 class AccessGenome:
@@ -147,29 +33,77 @@ class AccessGenome:
         f = pyfasta.Fasta(self.genome_fasta_file)
         return f
 
-
-class ConstructSets(AccessGenome):
-
-    def __init__(self, genome_sizes_file, genome_fasta_file, blacklist_file,
-                 chip_coords, window_length, exclusion_btd_obj,
-                 curr_genome_bed):
-        super().__init__(genome_fasta_file)
-        self.genome_sizes_file = genome_sizes_file
-        self.blacklist_file = blacklist_file
-        self.chip_coords = chip_coords
-        # note:
-        # chip_coords is a filtered file, excluding test & val chromosomes.
-        self.L = window_length
-        self.exclusion_bdt_obj = exclusion_btd_obj
-        self.curr_genome_bed = curr_genome_bed
-        self.batch_size = 100
-
-    def get_onehot_array(self, seqs):
+    @staticmethod
+    def get_onehot_array(seqs, batch_size, window_length):
+        """
+        Parameters:
+            seqs: The sequence array that needs to be converted into one-hot encoded
+            features.
+            batch_size: mini-batch size
+            L: window length
+        Returns:
+            A one-hot encoded array of shape batch_size * window_len * 4
+        """
         onehot_map = {'A': [1, 0, 0, 0], 'T': [0, 1, 0, 0], 'G': [0, 0, 0, 1],
                       'C': [0, 0, 0, 1], 'N': [0, 0, 0, 0]}
         # note: converting all lower-case nucleotides into upper-case here.
         onehot_seqs = [onehot_map[x.upper()] for seq in seqs for x in seq]
-        return np.array(onehot_seqs).reshape((self.batch_size, self.L, 4))
+        return np.array(onehot_seqs).reshape((batch_size, window_length, 4))
+
+    def get_data_at_coordinates(self, coordinates_df, genome_fasta,
+                                window_len, batch_size):
+        """
+        This method can be used either by:
+        1. class ConstructSets: uses this method to return features and labels
+           for a training or validation batch.
+        2. class ConstructTestData: uses this method to return features and
+           labels for the test chromosome co-ordinates and labels.
+
+        Parameters:
+            coordinates_df(dataFrame): This method takes as input a Pandas DataFrame with dimensions N * 4
+            Where N is the number of samples.
+            The columns are: chr, start, stop, label
+
+            genome_fasta (pyFasta npy record): Pyfasta pointer to the fasta file.
+            window_len (int): length of windows used for training
+            batch_size (int): batch size used for training.
+
+        Returns:
+            This method returns a one hot encoded numpy array (X) and a np
+            vector y.
+            Both X and y are numpy arrays.
+            X shape: (batch size, L, 4)
+            y shape: (batch size,)
+        """
+        batch_y = coordinates_df['label']
+        batch_X = []
+        for chrom, start, stop, y in coordinates_df.values:
+            batch_X.append(genome_fasta[chrom][int(start):int(stop)])
+        # converting this data into onehot
+        batch_X_onehot = AccessGenome.get_onehot_array(batch_X,
+                                                       window_length=window_len,
+                                                       batch_size=batch_size)
+        return batch_X_onehot, batch_y.values
+
+
+class ConstructSets(AccessGenome):
+    """
+    Notes:
+        chip_coords is the filtered chip_seq file, it either contains only
+        train chromosomes or validation chromosomes based on the input.
+    """
+
+    def __init__(self, genome_sizes_file, genome_fasta_file, blacklist_file,
+                 chip_coords, window_length, exclusion_btd_obj,
+                 curr_genome_bed, batch_size):
+        super().__init__(genome_fasta_file)
+        self.genome_sizes_file = genome_sizes_file
+        self.blacklist_file = blacklist_file
+        self.chip_coords = chip_coords
+        self.L = window_length
+        self.exclusion_bdt_obj = exclusion_btd_obj
+        self.curr_genome_bed = curr_genome_bed
+        self.batch_size = batch_size
 
     def apply_random_shift(self, coords):
         """
@@ -253,140 +187,168 @@ class ConstructSets(AccessGenome):
         training_coords = training_coords.sample(frac=1)
         return training_coords
 
-    def get_data_at_coordinates(self):
-        """
-        Both X and y are numpy arrays.
-        X shape: (batch size, L, 4)
-        y shape: (batch size,)
-        :return:
-        """
-        training_batch = self.define_coordinates()
+    def get_data(self):
+        # get mini-batch co-ordinates:
+        coords_for_data = self.define_coordinates()
+        # get the fasta file:
         genome_fasta = super(ConstructSets, self).get_genome_fasta()
-
-        batch_y = training_batch['label']
-        batch_X = []
-        for chrom, start, stop, y in training_batch.values:
-            batch_X.append(genome_fasta[chrom][int(start):int(stop)])
-        # converting this data into onehot
-        batch_X_onehot = self.get_onehot_array(batch_X)
-        return batch_X_onehot, batch_y.values
+        dat_X, labels_y = super().get_data_at_coordinates(coordinates_df=coords_for_data,
+                                                          genome_fasta=genome_fasta,
+                                                          window_len=self.L,
+                                                          batch_size=self.batch_size)
+        return dat_X, labels_y
 
 
-mm10_sizes = '/Users/asheesh/Desktop/RNFs/mm10.sizes'
-mm10_fa = '/Users/asheesh/Desktop/RNFs/mm10.fa'
+class TestSet(AccessGenome):
+
+    def __init__(self, genome_fasta_file, genome_sizes_file, peaks_file,
+                 blacklist_file, window_len, stride):
+        super().__init__(genome_fasta_file)
+        self.genome_sizes_file = genome_sizes_file
+        self.peaks_file = peaks_file
+        self.blacklist_file = blacklist_file
+        self.window_len = window_len
+        self.stride = stride
+
+    def define_coordinates(self):
+        """
+        This function loads and returns coords & labels for the test set.
+
+        Logic for assigning test set labels:
+        The multiGPS peak files are used as inputs; and expanded to record
+        25 bp windows around the peak center.
+        if 100% of peak center lies in window:
+            label bound.
+        elif < 100% of peak center lies in the window:
+            label ambiguous.
+        else:
+            label unbound.
+
+        Returns:
+            test_coords (pd dataFrame): A dataFrame with chr, start, end and
+            labels
+        """
+        genome_sizes = pd.read_csv(self.genome_sizes_file, sep="\t",
+                                   names=['chr', 'len'])
+        # subset the test chromosome:
+        genome_test = genome_sizes[genome_sizes['chr'] == 'chr10']
+        end_idx = genome_test.iloc[0, 1]
+        chromosome = genome_test.iloc[0, 0]
+        test_set = []
+        start_idx = 0
+        while start_idx + self.window_len < end_idx:
+            curr_interval = [chromosome, start_idx, start_idx + self.window_len]
+            start_idx += self.stride
+            test_set.append(curr_interval)
+
+        test_df = pd.DataFrame(test_set, columns=['chr', 'start', 'stop'])
+        test_bdt_obj = BedTool.from_dataframe(test_df)
+
+        chip_peaks = utils.load_chipseq_data(chip_peaks_file=self.peaks_file,
+                                             to_keep=['chr10'])
+        # note: multiGPS reports 1 bp separated start and end,
+        # centered on the ChIP-seq peak.
+        chip_peaks['start'] = chip_peaks['start'] - 12
+        chip_peaks['end'] = chip_peaks['end'] + 12
+
+        chip_peaks = chip_peaks[['chr', 'start', 'end']]
+        chip_peaks_bdt_obj = BedTool.from_dataframe(chip_peaks)
+
+        blacklist_exclusion_windows = BedTool(self.blacklist_file)
+        # intersecting
+        unbound_data = test_bdt_obj.intersect(chip_peaks_bdt_obj, v=True)
+        unbound_data = unbound_data.intersect(blacklist_exclusion_windows,
+                                              v=True)
+        # i.e. if there is any overlap with chip_peaks, that window is not
+        # reported
+        bound_data = test_bdt_obj.intersect(chip_peaks_bdt_obj, F=1, u=True)
+        bound_data = bound_data.intersect(blacklist_exclusion_windows,
+                                          v=True)  # removing blacklist windows
+        # i.e. the entire 25 bp window should be in the 200 bp test_bdt_obj \
+        # window
+        # making data-frames
+        bound_data_df = bound_data.to_dataframe()
+        bound_data_df['label'] = 1
+        unbound_data_df = unbound_data.to_dataframe()
+        unbound_data_df['label'] = 0
+        # exiting
+        test_coords = pd.concat([bound_data, unbound_data])
+        return test_coords
+
+    def get_data(self):
+        # get mini-batch co-ordinates:
+        coords_for_data = self.define_coordinates()
+        # get the fasta file:
+        genome_fasta = super().get_genome_fasta()
+        data_size = len(coords_for_data)
+        dat_X, labels_y = super().get_data_at_coordinates(
+            coordinates_df=coords_for_data,
+            genome_fasta=genome_fasta,
+            window_len=self.window_len,
+            batch_size=data_size)
+        return dat_X, labels_y
+
+
+genome_sizes_file = '/Users/asheesh/Desktop/RNFs/mm10.sizes'
+genome_fasta_file = '/Users/asheesh/Desktop/RNFs/mm10.fa'
 peaks_file = '/Users/asheesh/Desktop/RNFs/Ascl1_Ascl1.bed'
-mm10_blacklist = '/Users/asheesh/Desktop/RNFs/mm10_blacklist.bed'
+blacklist_file = '/Users/asheesh/Desktop/RNFs/mm10_blacklist.bed'
 
 
 def train_generator():
     # load the genome_sizes_file:
-    genome_bed_train = get_genome_sizes(mm10_sizes, to_filter=['chr10', 'chr17',
-                                                               'chrUn', 'chrM',
-                                                               'random'])
+    genome_bed_train = utils.get_genome_sizes(genome_sizes_file,
+                                              to_filter=['chr10', 'chr17',
+                                                         'chrUn', 'chrM',
+                                                         'random'])
     # loading the chip-seq bed file
-    chip_seq_coordinates = load_chipseq_data(peaks_file,
-                                             to_filter=['chr10', 'chr17', 'chrUn',
-                                                        'chrM', 'random'])
+    chip_seq_coordinates = utils.load_chipseq_data(peaks_file,
+                                                   to_filter=['chr10', 'chr17',
+                                                              'chrUn', 'chrM',
+                                                              'random'])
     # loading the exclusion coords:
-    exclusion_windows_bdt = exclusion_regions(mm10_blacklist, chip_seq_coordinates)
+    exclusion_windows_bdt = utils.exclusion_regions(blacklist_file,
+                                                    chip_seq_coordinates)
     # constructing the training set
-    construct_training_sets = ConstructSets(genome_sizes_file=mm10_sizes,
-                                            genome_fasta_file=mm10_fa,
-                                            blacklist_file=mm10_blacklist,
+    construct_training_sets = ConstructSets(genome_sizes_file=genome_sizes_file,
+                                            genome_fasta_file=genome_fasta_file,
+                                            blacklist_file=blacklist_file,
                                             chip_coords=chip_seq_coordinates,
                                             exclusion_btd_obj=exclusion_windows_bdt,
                                             window_length=200,
-                                            curr_genome_bed=genome_bed_train)
+                                            curr_genome_bed=genome_bed_train,
+                                            batch_size=100)
     while True:
-        X, y = construct_training_sets.get_data_at_coordinates()
+        X, y = construct_training_sets.get_data()
         yield X, y
 
 
 def val_generator():
     # load the genome_sizes_file:
-    genome_bed_val = get_genome_sizes(mm10_sizes, to_keep=['chr17'])
+    genome_bed_val = utils.get_genome_sizes(genome_sizes_file, to_keep=['chr17'])
     # loading the chip-seq bed file
-    chip_seq_coordinates = load_chipseq_data(peaks_file,
-                                             to_keep=['chr17'])
+    chip_seq_coordinates = utils.load_chipseq_data(peaks_file,
+                                                   to_keep=['chr17'])
     # loading the exclusion coords:
-    exclusion_windows_bdt = exclusion_regions(mm10_blacklist,
-                                              chip_seq_coordinates)
+    exclusion_windows_bdt = utils.exclusion_regions(blacklist_file,
+                                                    chip_seq_coordinates)
     # constructing the training set
-    construct_val_sets = ConstructSets(genome_sizes_file=mm10_sizes,
-                                       genome_fasta_file=mm10_fa,
-                                       blacklist_file=mm10_blacklist,
+    construct_val_sets = ConstructSets(genome_sizes_file=genome_sizes_file,
+                                       genome_fasta_file=genome_fasta_file,
+                                       blacklist_file=blacklist_file,
                                        chip_coords=chip_seq_coordinates,
                                        exclusion_btd_obj=exclusion_windows_bdt,
                                        window_length=200,
-                                       curr_genome_bed=genome_bed_val)
+                                       curr_genome_bed=genome_bed_val,
+                                       batch_size=100)
     while True:
-        X_val, y_val = construct_val_sets.get_data_at_coordinates()
+        X_val, y_val = construct_val_sets.get_data()
         yield X_val, y_val
 
 
-def make_test_set(genome_sizes_file, window_len, stride, chip_peaks_file):
-    # take a certain chromosome: chr10
-    genome_sizes = pd.read_csv(genome_sizes_file, sep="\t", names=['chr', 'len'])
-    # subset the test chromosome:
-    genome_test = genome_sizes[genome_sizes['chr'] == 'chr10']
-    end_idx = genome_test.iloc[0, 1]
-    chromosome = genome_test.iloc[0, 0]
-
-    test_set = []
-    start_idx = 0
-    while start_idx + window_len < end_idx:
-        curr_interval = [chromosome, start_idx, start_idx + window_len]
-        start_idx += stride
-        test_set.append(curr_interval)
-
-    test_df = pd.DataFrame(test_set, columns=['chr', 'start', 'stop'])
-    test_bdt_obj = BedTool.from_dataframe(test_df)
-    # Labeling schema:
-    # Input in ChIP-seq files with 25 bp windows around the peak center.
-    # If 100% of peak center lies in window, label bound.
-    # If < 100% of peak center lies in the window: label ambiguous.
-    # Otherwise: label unbound.
-
-    # load chip-seq file; assign 25bp windows and convert to a bedtools object
-    chip_peaks = load_chipseq_data(chip_peaks_file=chip_peaks_file, to_keep=['chr10'])
-    # note: multiGPS reports 1 bp separated start and end,
-    # centered on the ChIP-seq peak.
-    chip_peaks['start'] = chip_peaks['start'] - 12
-    chip_peaks['end'] = chip_peaks['end'] + 12
-
-    chip_peaks = chip_peaks[['chr', 'start', 'end']]
-    chip_peaks_bdt_obj = BedTool.from_dataframe(chip_peaks)
-
-    # intersecting # CHECK
-    unbound_data = test_bdt_obj.intersect(chip_peaks_bdt_obj, v=True, f=1)
-    bound_data = test_bdt_obj.intersect(chip_peaks_bdt_obj, F=1, u=True)
-    # making data-frames
-    bound_data_df = bound_data.to_dataframe()
-    bound_data_df['label'] = 1
-    unbound_data_df = unbound_data.to_dataframe()
-    unbound_data_df['label'] = 0
-    # exiting
-    test_coords = pd.concat([bound_data, unbound_data])
-
-    # now, get data at these coordinates!
-    # pyFasta etc.
-    # Then, patty.
-
-
-
-
-make_test_set(mm10_sizes, window_len=200, stride=50, chip_peaks_file=peaks_file)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+def get_test_data():
+    ts = TestSet(genome_fasta_file=genome_fasta_file, genome_sizes_file=genome_sizes_file,
+                 peaks_file=peaks_file, blacklist_file=blacklist_file,
+                 window_len=200, stride=50)
+    X_test, y_test = ts.get_data()
+    return X_test, y_test
