@@ -196,7 +196,7 @@ class ConstructSets(AccessGenome):
                                                           genome_fasta=genome_fasta,
                                                           window_len=self.L,
                                                           batch_size=self.batch_size)
-        return dat_X, labels_y
+        return dat_X, labels_y, coords_for_data
 
 
 class TestSet(AccessGenome):
@@ -272,7 +272,7 @@ class TestSet(AccessGenome):
         unbound_data_df = unbound_data.to_dataframe()
         unbound_data_df['label'] = 0
         # exiting
-        test_coords = pd.concat([bound_data, unbound_data])
+        test_coords = pd.concat([bound_data_df, unbound_data_df])
         return test_coords
 
     def get_data(self):
@@ -286,49 +286,40 @@ class TestSet(AccessGenome):
             genome_fasta=genome_fasta,
             window_len=self.window_len,
             batch_size=data_size)
-        return dat_X, labels_y
+        return dat_X, labels_y, coords_for_data
 
 
-genome_sizes_file = '/Users/asheesh/Desktop/RNFs/mm10.sizes'
-genome_fasta_file = '/Users/asheesh/Desktop/RNFs/mm10.fa'
-peaks_file = '/Users/asheesh/Desktop/RNFs/Ascl1_Ascl1.bed'
-blacklist_file = '/Users/asheesh/Desktop/RNFs/mm10_blacklist.bed'
+def data_generator(genome_sizes_file, peaks_file, genome_fasta_file,
+                   blacklist_file, to_keep, to_filter):
+    """
+    This generator can either generate training data or validation data based on
+    the to_keep and to_filter arguments.
 
+    The train generate uses the to_filter argument, whereas to_keep=None
+    For example:
+    train_generator:  to_filter=['chr10', 'chr17, 'chrUn', 'chrM', 'random']
+    i.e. In this construction; chr10 and chr17 can be used for testing/validation.
 
-def train_generator():
+    The val generator uses the to_keep argument, whereas to_filter=None.
+    For example:
+    val_generator: to_keep=['chr17']
+    i.e. In this construction; chr17 data is used for validation.
+
+    Additional Parameters:
+        genome_sizes_file: sizes
+        peaks_file: multiGPS formatted BED file
+        blacklist_file: BED format blacklist file
+        genome_fasta_file: fasta file for the whole genome
+        batch_size (int): batch size used for training and validation batches
+        window_len (int): the length of windows used for training and testing.
+    """
     # load the genome_sizes_file:
-    genome_bed_train = utils.get_genome_sizes(genome_sizes_file,
-                                              to_filter=['chr10', 'chr17',
-                                                         'chrUn', 'chrM',
-                                                         'random'])
+    genome_bed_val = utils.get_genome_sizes(genome_sizes_file, to_keep=to_keep,
+                                            to_filter=to_filter)
     # loading the chip-seq bed file
     chip_seq_coordinates = utils.load_chipseq_data(peaks_file,
-                                                   to_filter=['chr10', 'chr17',
-                                                              'chrUn', 'chrM',
-                                                              'random'])
-    # loading the exclusion coords:
-    exclusion_windows_bdt = utils.exclusion_regions(blacklist_file,
-                                                    chip_seq_coordinates)
-    # constructing the training set
-    construct_training_sets = ConstructSets(genome_sizes_file=genome_sizes_file,
-                                            genome_fasta_file=genome_fasta_file,
-                                            blacklist_file=blacklist_file,
-                                            chip_coords=chip_seq_coordinates,
-                                            exclusion_btd_obj=exclusion_windows_bdt,
-                                            window_length=200,
-                                            curr_genome_bed=genome_bed_train,
-                                            batch_size=100)
-    while True:
-        X, y = construct_training_sets.get_data()
-        yield X, y
-
-
-def val_generator():
-    # load the genome_sizes_file:
-    genome_bed_val = utils.get_genome_sizes(genome_sizes_file, to_keep=['chr17'])
-    # loading the chip-seq bed file
-    chip_seq_coordinates = utils.load_chipseq_data(peaks_file,
-                                                   to_keep=['chr17'])
+                                                   to_keep=to_keep,
+                                                   to_filter=to_filter)
     # loading the exclusion coords:
     exclusion_windows_bdt = utils.exclusion_regions(blacklist_file,
                                                     chip_seq_coordinates)
@@ -342,13 +333,15 @@ def val_generator():
                                        curr_genome_bed=genome_bed_val,
                                        batch_size=100)
     while True:
-        X_val, y_val = construct_val_sets.get_data()
-        yield X_val, y_val
+        X_val, y_val, coords = construct_val_sets.get_data()
+        yield X_val, y_val, coords
 
 
-def get_test_data():
+def get_test_data(genome_sizes_file, peaks_file, genome_fasta_file,
+                  blacklist_file):
     ts = TestSet(genome_fasta_file=genome_fasta_file, genome_sizes_file=genome_sizes_file,
                  peaks_file=peaks_file, blacklist_file=blacklist_file,
-                 window_len=200, stride=50)
-    X_test, y_test = ts.get_data()
-    return X_test, y_test
+                 window_len=500, stride=100)
+    X_test, y_test, coords = ts.get_data()
+    return X_test, y_test, coords
+
