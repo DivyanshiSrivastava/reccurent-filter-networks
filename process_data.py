@@ -290,7 +290,8 @@ class TestSet(AccessGenome):
 
 
 def data_generator(genome_sizes_file, peaks_file, genome_fasta_file,
-                   blacklist_file, to_keep, to_filter):
+                   blacklist_file, to_keep, to_filter,
+                   window_lenght=200, batch_size=100):
     """
     This generator can either generate training data or validation data based on
     the to_keep and to_filter arguments.
@@ -329,9 +330,9 @@ def data_generator(genome_sizes_file, peaks_file, genome_fasta_file,
                                        blacklist_file=blacklist_file,
                                        chip_coords=chip_seq_coordinates,
                                        exclusion_btd_obj=exclusion_windows_bdt,
-                                       window_length=200,
+                                       window_length=window_lenght,
                                        curr_genome_bed=genome_bed_val,
-                                       batch_size=100)
+                                       batch_size=batch_size)
     while True:
         X_val, y_val, coords = construct_val_sets.get_data()
         yield X_val, y_val, coords

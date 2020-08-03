@@ -24,10 +24,12 @@ def filter_chromosomes(input_df, to_filter=None, to_keep=None):
           output_df (dataFrame): The filtered pandas dataFrame
     """
     if to_filter:
-        # filter out chromosomes from the to_filter list:
+        print("In to filter")
+        output_df = input_df.copy()
         for chromosome in to_filter:
-            output_df = input_df[~(input_df['chr'] == chromosome)]
+            output_df = output_df[~(input_df['chr'] == chromosome)]
     elif to_keep:
+        print("In to keep")
         # keep only the to_keep chromosomes:
         # note: this is slightly different from to_filter, because
         # at a time, if only one chromosome is retained, it can be used
@@ -40,6 +42,7 @@ def filter_chromosomes(input_df, to_filter=None, to_keep=None):
         output_df = pd.concat(filtered_chromosomes)
     else:
         output_df = input_df
+    print(output_df[1:20])
     return output_df
 
 
@@ -120,9 +123,10 @@ def exclusion_regions(blacklist_file, chip_seq_data):
     Returns:
         exclusion_windows (BedTool): A bedtools object containing exclusion windows.
     """
-    chip_seq_data['start'] = chip_seq_data['start'] - 250
-    chip_seq_data['end'] = chip_seq_data['end'] + 250
-    bound_exclusion_windows = BedTool.from_dataframe(chip_seq_data[['chr', 'start','end']])
+    temp_chip_file = chip_seq_data.copy()  # Doesn't modify OG array.
+    temp_chip_file['start'] = temp_chip_file['start'] - 250
+    temp_chip_file['end'] = temp_chip_file['end'] + 250
+    bound_exclusion_windows = BedTool.from_dataframe(temp_chip_file[['chr', 'start','end']])
     blacklist_exclusion_windows = BedTool(blacklist_file)
     exclusion_windows = BedTool.cat(
         *[blacklist_exclusion_windows, bound_exclusion_windows])
