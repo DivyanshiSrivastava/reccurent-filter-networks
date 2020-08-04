@@ -329,17 +329,17 @@ def data_generator(genome_sizes_file, peaks_file, genome_fasta_file,
     chipseq_exclusion_windows, exclusion_windows_bdt = utils.exclusion_regions(blacklist_file,
                                                     chip_seq_coordinates)
     # constructing the training set
-    construct_val_sets = ConstructSets(genome_sizes_file=genome_sizes_file,
-                                       genome_fasta_file=genome_fasta_file,
-                                       blacklist_file=blacklist_file,
-                                       chip_coords=chip_seq_coordinates,
-                                       exclusion_btd_obj=exclusion_windows_bdt,
-                                       window_length=window_lenght,
-                                       curr_genome_bed=genome_bed_val,
-                                       batch_size=batch_size)
+    construct_sets = ConstructSets(genome_sizes_file=genome_sizes_file,
+                                   genome_fasta_file=genome_fasta_file,
+                                   blacklist_file=blacklist_file,
+                                   chip_coords=chip_seq_coordinates,
+                                   exclusion_btd_obj=exclusion_windows_bdt,
+                                   window_length=window_lenght,
+                                   curr_genome_bed=genome_bed_val,
+                                   batch_size=batch_size)
     while True:
-        X_val, y_val, coords = construct_val_sets.get_data()
-        yield X_val, y_val, coords
+        X, y, coords = construct_sets.get_data()
+        yield X, y
 
 
 def get_test_data(genome_sizes_file, peaks_file, genome_fasta_file,
@@ -350,4 +350,7 @@ def get_test_data(genome_sizes_file, peaks_file, genome_fasta_file,
                  window_len=window_len, stride=stride, to_keep=to_keep)
     X_test, y_test, coords = ts.get_data()
     return X_test, y_test, coords
+
+
+
 
