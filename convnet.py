@@ -70,7 +70,7 @@ class ConvNet:
                                   verbose=1, patience=10)
         model_cnn.fit_generator(generator=train_gen,
                                 steps_per_epoch=10000,
-                                epochs=5,
+                                epochs=100,
                                 validation_data=val_gen,
                                 validation_steps=100,
                                 callbacks=[earlystop])
