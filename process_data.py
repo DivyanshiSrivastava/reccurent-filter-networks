@@ -255,9 +255,7 @@ class TestSet(AccessGenome):
         # (i.e. 249 if window_len=500); multiGPS reports 1bp intervals
 
         chip_peaks = chip_peaks[['chr', 'start', 'end']]
-        print(chip_peaks[:5])
         chip_peaks_bdt_obj = BedTool.from_dataframe(chip_peaks)
-        print(chip_peaks_bdt_obj.head())
 
         blacklist_exclusion_windows = BedTool(self.blacklist_file)
         # intersecting

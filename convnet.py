@@ -9,6 +9,7 @@ Note: The code structure should remain similar for the RNF architectures.
 import numpy as np
 import keras
 import argparse
+import os, subprocess
 
 # sk-learn imports
 from sklearn.model_selection import train_test_split
@@ -69,7 +70,7 @@ class ConvNet:
                                   verbose=1, patience=10)
         model_cnn.fit_generator(generator=train_gen,
                                 steps_per_epoch=10000,
-                                batch_size=100,
+                                epochs=5,
                                 validation_data=val_gen,
                                 validation_steps=100,
                                 callbacks=[earlystop])
@@ -83,28 +84,36 @@ class ConvNet:
         auroc = roc_auc_score(y_test, model_probas)
         auprc = average_precision_score(y_test, model_probas)
 
-        records_file = results_dir + '/metrics'
-        # save metrics to results file in the outdir:
-        records_file.write("Model:{0}\n".format('cnn'))
-        records_file.write("AUC ROC:{0}\n".format(auroc))
-        records_file.write("AUC PRC:{0}\n".format(auprc))
+        subprocess.call(['mkdir', results_dir])
+        records_file = results_dir + '/metrics.txt'
+
+        with open(records_file, "w") as rf:
+            # save metrics to results file in the outdir:
+            rf.write("Model:{0}\n".format('cnn'))
+            rf.write("AUC ROC:{0}\n".format(auroc))
+            rf.write("AUC PRC:{0}\n".format(auprc))
         return auroc, auprc
 
 
 def train_model(genome_size, fa, peaks, blacklist, results_dir):
+
+    print('getting the generators & test dataset')
     train_generator, val_generator, test_data = \
             get_data.get_train_and_val_generators(genome_sizes=genome_size,
                                                   fa=fa,
                                                   peaks=peaks,
                                                   blacklist=blacklist)
 
+    print('building convolutional architecture')
     architecture = ConvNet(window_len=500, n_filters=128, filter_size=24,
                            pooling_stride=8, pooling_size=8, n_dense_layers=3,
                            dropout_freq=0.5, dense_size=128)
     model = architecture.get_model()
+    print('fitting the model')
     fitted_model = architecture.fit_the_data(model_cnn=model,
                                              train_gen=train_generator,
                                              val_gen=val_generator)
+    print('evaluating the model')
     architecture.evaluate_and_save_model(model=fitted_model,
                                          test_data_tuple=test_data,
                                          results_dir=results_dir)

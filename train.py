@@ -1,5 +1,4 @@
 import argparse
-import get_data
 import convnet
 
 if __name__ == "__main__":
