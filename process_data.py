@@ -202,13 +202,14 @@ class ConstructSets(AccessGenome):
 class TestSet(AccessGenome):
 
     def __init__(self, genome_fasta_file, genome_sizes_file, peaks_file,
-                 blacklist_file, window_len, stride):
+                 blacklist_file, window_len, stride, to_keep):
         super().__init__(genome_fasta_file)
         self.genome_sizes_file = genome_sizes_file
         self.peaks_file = peaks_file
         self.blacklist_file = blacklist_file
         self.window_len = window_len
         self.stride = stride
+        self.to_keep = to_keep
 
     def define_coordinates(self):
         """
@@ -245,14 +246,18 @@ class TestSet(AccessGenome):
         test_bdt_obj = BedTool.from_dataframe(test_df)
 
         chip_peaks = utils.load_chipseq_data(chip_peaks_file=self.peaks_file,
-                                             to_keep=['chr10'])
+                                             to_keep=self.to_keep)
         # note: multiGPS reports 1 bp separated start and end,
         # centered on the ChIP-seq peak.
-        chip_peaks['start'] = chip_peaks['start'] - 12
-        chip_peaks['end'] = chip_peaks['end'] + 12
+        chip_peaks['start'] = chip_peaks['start'] - int(self.window_len/2)
+        # (i.e. 250 if window_len=500 )
+        chip_peaks['end'] = chip_peaks['end'] + int(self.window_len/2 - 1)
+        # (i.e. 249 if window_len=500); multiGPS reports 1bp intervals
 
         chip_peaks = chip_peaks[['chr', 'start', 'end']]
+        print(chip_peaks[:5])
         chip_peaks_bdt_obj = BedTool.from_dataframe(chip_peaks)
+        print(chip_peaks_bdt_obj.head())
 
         blacklist_exclusion_windows = BedTool(self.blacklist_file)
         # intersecting
@@ -261,11 +266,10 @@ class TestSet(AccessGenome):
                                               v=True)
         # i.e. if there is any overlap with chip_peaks, that window is not
         # reported
-        bound_data = test_bdt_obj.intersect(chip_peaks_bdt_obj, F=1, u=True)
-        bound_data = bound_data.intersect(blacklist_exclusion_windows,
-                                          v=True)  # removing blacklist windows
-        # i.e. the entire 25 bp window should be in the 200 bp test_bdt_obj \
-        # window
+        # removing blacklist windows
+        bound_data = chip_peaks_bdt_obj.intersect(blacklist_exclusion_windows,
+                                                  v=True)
+        # i.e. the entire 500 bp window is the positive window.
         # making data-frames
         bound_data_df = bound_data.to_dataframe()
         bound_data_df['label'] = 1
@@ -291,7 +295,7 @@ class TestSet(AccessGenome):
 
 def data_generator(genome_sizes_file, peaks_file, genome_fasta_file,
                    blacklist_file, to_keep, to_filter,
-                   window_lenght=200, batch_size=100):
+                   window_lenght, batch_size=100):
     """
     This generator can either generate training data or validation data based on
     the to_keep and to_filter arguments.
@@ -322,7 +326,7 @@ def data_generator(genome_sizes_file, peaks_file, genome_fasta_file,
                                                    to_keep=to_keep,
                                                    to_filter=to_filter)
     # loading the exclusion coords:
-    exclusion_windows_bdt = utils.exclusion_regions(blacklist_file,
+    chipseq_exclusion_windows, exclusion_windows_bdt = utils.exclusion_regions(blacklist_file,
                                                     chip_seq_coordinates)
     # constructing the training set
     construct_val_sets = ConstructSets(genome_sizes_file=genome_sizes_file,
@@ -339,10 +343,11 @@ def data_generator(genome_sizes_file, peaks_file, genome_fasta_file,
 
 
 def get_test_data(genome_sizes_file, peaks_file, genome_fasta_file,
-                  blacklist_file):
+                  blacklist_file, to_keep, window_len, stride):
+
     ts = TestSet(genome_fasta_file=genome_fasta_file, genome_sizes_file=genome_sizes_file,
                  peaks_file=peaks_file, blacklist_file=blacklist_file,
-                 window_len=500, stride=100)
+                 window_len=window_len, stride=stride, to_keep=to_keep)
     X_test, y_test, coords = ts.get_data()
     return X_test, y_test, coords
 
