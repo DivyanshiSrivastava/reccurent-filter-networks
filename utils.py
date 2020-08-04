@@ -26,7 +26,9 @@ def filter_chromosomes(input_df, to_filter=None, to_keep=None):
     if to_filter:
         output_df = input_df.copy()
         for chromosome in to_filter:
-            output_df = output_df[~(input_df['chr'] == chromosome)]
+            # note: using the str.contains method to remove all
+            # contigs; for example: chrUn_JH584304
+            output_df = output_df[~(input_df['chr'].str.contains(chromosome))]
     elif to_keep:
         # keep only the to_keep chromosomes:
         # note: this is slightly different from to_filter, because
@@ -83,7 +85,8 @@ def get_genome_sizes(genome_sizes_file, to_filter=None, to_keep=None):
     return genome_bed_data
 
 
-def load_chipseq_data(chip_peaks_file, to_filter=None, to_keep=None):
+def load_chipseq_data(chip_peaks_file, genome_sizes_file, to_filter=None,
+                      to_keep=None):
     """
     Loads the ChIP-seq peaks data.
     The chip peaks file is a tab seperated bed file:
@@ -102,6 +105,24 @@ def load_chipseq_data(chip_peaks_file, to_filter=None, to_keep=None):
                                        'score'])
     chip_seq_data = filter_chromosomes(chip_seq_data, to_filter=to_filter,
                                        to_keep=to_keep)
+
+    sizes = pd.read_csv(genome_sizes_file, names=['chr', 'chrsize'],
+                        sep='\t')
+
+    # filtering out any regions that are close enough to the edges to
+    # result in out-of-range windows when applying data augmentation.
+    chrom_sizes_dict = (dict(zip(sizes.chr, sizes.chrsize)))
+    chip_seq_data['window_max'] = chip_seq_data['end'] + 500
+    chip_seq_data['window_min'] = chip_seq_data['start'] - 500
+
+    chip_seq_data['chr_limits_upper'] = chip_seq_data['chr'].map(
+        chrom_sizes_dict)
+    chip_seq_data = chip_seq_data[chip_seq_data['window_max'] <=
+                                  chip_seq_data['chr_limits_upper']]
+    chip_seq_data = chip_seq_data[chip_seq_data['window_min'] >= 0]
+    chip_seq_data = chip_seq_data[['chr', 'start', 'end', 'caller',
+                                   'score']]
+
     return chip_seq_data
 
 
