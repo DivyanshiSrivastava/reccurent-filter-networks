@@ -246,7 +246,8 @@ class TestSet(AccessGenome):
         test_bdt_obj = BedTool.from_dataframe(test_df)
 
         chip_peaks = utils.load_chipseq_data(chip_peaks_file=self.peaks_file,
-                                             to_keep=self.to_keep)
+                                             to_keep=self.to_keep,
+                                             genome_sizes_file=self.genome_sizes_file)
         # note: multiGPS reports 1 bp separated start and end,
         # centered on the ChIP-seq peak.
         chip_peaks['start'] = chip_peaks['start'] - int(self.window_len/2)
@@ -321,6 +322,7 @@ def data_generator(genome_sizes_file, peaks_file, genome_fasta_file,
                                             to_filter=to_filter)
     # loading the chip-seq bed file
     chip_seq_coordinates = utils.load_chipseq_data(peaks_file,
+                                                   genome_sizes_file=genome_sizes_file,
                                                    to_keep=to_keep,
                                                    to_filter=to_filter)
     # loading the exclusion coords:
