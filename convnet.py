@@ -72,7 +72,7 @@ class ConvNet:
                                 steps_per_epoch=10000,
                                 epochs=100,
                                 validation_data=val_gen,
-                                validation_steps=100,
+                                validation_steps=50,
                                 callbacks=[earlystop])
 
         return model_cnn
@@ -92,7 +92,10 @@ class ConvNet:
             rf.write("Model:{0}\n".format('cnn'))
             rf.write("AUC ROC:{0}\n".format(auroc))
             rf.write("AUC PRC:{0}\n".format(auprc))
+
+        model.save(results_dir + '/model.hdf5')
         return auroc, auprc
+
 
 
 def train_model(genome_size, fa, peaks, blacklist, results_dir):
