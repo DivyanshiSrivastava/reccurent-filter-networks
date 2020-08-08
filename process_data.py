@@ -47,8 +47,15 @@ class AccessGenome:
         onehot_map = {'A': [1, 0, 0, 0], 'T': [0, 1, 0, 0], 'G': [0, 0, 0, 1],
                       'C': [0, 0, 0, 1], 'N': [0, 0, 0, 0]}
         # note: converting all lower-case nucleotides into upper-case here.
-        onehot_seqs = [onehot_map[x.upper()] for seq in seqs for x in seq]
-        return np.array(onehot_seqs).reshape((batch_size, window_length, 4))
+        # onehot_seqs = [onehot_map[x.upper()] for seq in seqs for x in seq]
+        # remove the reshaping step:
+        onehot_data = list()
+        for sequence in seqs:
+            onehot_seq = list()
+            for nucleotide in sequence:
+                onehot_seq.append(onehot_map[nucleotide.upper()])
+            onehot_data.append(onehot_seq)
+        return np.array(onehot_data)
 
     def get_data_at_coordinates(self, coordinates_df, genome_fasta,
                                 window_len, batch_size):
@@ -248,6 +255,7 @@ class TestSet(AccessGenome):
         chip_peaks = utils.load_chipseq_data(chip_peaks_file=self.peaks_file,
                                              to_keep=self.to_keep,
                                              genome_sizes_file=self.genome_sizes_file)
+        print(chip_peaks)
         # note: multiGPS reports 1 bp separated start and end,
         # centered on the ChIP-seq peak.
         chip_peaks['start'] = chip_peaks['start'] - int(self.window_len/2)
@@ -311,7 +319,7 @@ def data_generator(genome_sizes_file, peaks_file, genome_fasta_file,
 
     Additional Parameters:
         genome_sizes_file: sizes
-        peaks_file: multiGPS formatted BED file
+        peaks_file: multiGPS formatted *events* file
         blacklist_file: BED format blacklist file
         genome_fasta_file: fasta file for the whole genome
         batch_size (int): batch size used for training and validation batches

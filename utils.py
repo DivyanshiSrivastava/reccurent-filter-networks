@@ -89,20 +89,21 @@ def load_chipseq_data(chip_peaks_file, genome_sizes_file, to_filter=None,
                       to_keep=None):
     """
     Loads the ChIP-seq peaks data.
-    The chip peaks file is a tab seperated bed file:
-    chr1    1   150
-    chr2    2   350
+    The chip peaks file is an events bed file:
+    chr1:451350
+    chr2:91024
     ...
-    chrX    87  878
+    chrX:870000
     This file can be constructed using a any peak-caller. We use multiGPS.
-    Also constructs a BedTools object which can be later used to generate
+    Also constructs a 1 bp long bedfile for each coordinate and a
+    BedTools object which can be later used to generate
     negative sets.
 
     """
-    chip_seq_data = pd.read_csv(chip_peaks_file, sep='\t',
-                                header=None,
-                                names=['chr', 'start', 'end', 'caller',
-                                       'score'])
+    chip_seq_data = pd.read_csv(chip_peaks_file, delimiter=':', header=None,
+                             names=['chr', 'start'])
+    chip_seq_data['end'] = chip_seq_data['start'] + 1
+
     chip_seq_data = filter_chromosomes(chip_seq_data, to_filter=to_filter,
                                        to_keep=to_keep)
 
@@ -120,8 +121,7 @@ def load_chipseq_data(chip_peaks_file, genome_sizes_file, to_filter=None,
     chip_seq_data = chip_seq_data[chip_seq_data['window_max'] <=
                                   chip_seq_data['chr_limits_upper']]
     chip_seq_data = chip_seq_data[chip_seq_data['window_min'] >= 0]
-    chip_seq_data = chip_seq_data[['chr', 'start', 'end', 'caller',
-                                   'score']]
+    chip_seq_data = chip_seq_data[['chr', 'start', 'end']]
 
     return chip_seq_data
 

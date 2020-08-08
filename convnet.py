@@ -67,7 +67,7 @@ class ConvNet:
         model_cnn.compile(loss='binary_crossentropy',
                           optimizer=sgd, metrics=['accuracy'])
         earlystop = EarlyStopping(monitor='val_loss', mode='min',
-                                  verbose=1, patience=10)
+                                  verbose=1, patience=15)
         model_cnn.fit_generator(generator=train_gen,
                                 steps_per_epoch=10000,
                                 epochs=100,
