@@ -1,5 +1,6 @@
 import numpy as np
 import process_data
+import sys
 
 
 def save_batches(file_name, generator, outdir):
@@ -55,6 +56,20 @@ def get_train_and_val_generators(genome_sizes, peaks, blacklist, fa):
                                            stride=500)
 
     return tg, vg, test_data
+
+
+# Testing the generator on ACI:
+genome_sizes = sys.argv[1]
+peaks = sys.argv[2]
+blacklist = sys.argv[3]
+fa = sys.argv[4]
+
+tg, vg, test_dat = get_train_and_val_generators(genome_sizes, peaks, blacklist, fa)
+index = 0
+while index < 1000:
+    X, y = next(tg)
+    print(X.shape)
+    print(y.shape)
 
 
 
