@@ -68,7 +68,7 @@ class ConvNet:
                           optimizer=sgd, metrics=['accuracy'])
         earlystop = EarlyStopping(monitor='val_loss', mode='min',
                                   verbose=1, patience=15)
-        model_cnn.fit(generator=train_gen,
+        model_cnn.fit(train_gen,
                       steps_per_epoch=1000,
                       epochs=100,
                       validation_data=next(val_gen),
