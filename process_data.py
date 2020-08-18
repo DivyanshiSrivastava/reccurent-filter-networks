@@ -44,18 +44,20 @@ class AccessGenome:
         Returns:
             A one-hot encoded array of shape batch_size * window_len * 4
         """
-        onehot_map = {'A': [1, 0, 0, 0], 'T': [0, 1, 0, 0], 'G': [0, 0, 0, 1],
+        onehot_map = {'A': [1, 0, 0, 0], 'T': [0, 1, 0, 0], 'G': [0, 0, 1, 0],
                       'C': [0, 0, 0, 1], 'N': [0, 0, 0, 0]}
         # note: converting all lower-case nucleotides into upper-case here.
-        # onehot_seqs = [onehot_map[x.upper()] for seq in seqs for x in seq]
+        onehot_seqs = [onehot_map[x.upper()] for seq in seqs for x in seq]
+        onehot_data = np.reshape(onehot_seqs, newshape=(batch_size, window_length, 4))
+        print(onehot_data.shape)
         # remove the reshaping step:
-        onehot_data = list()
-        for sequence in seqs:
-            onehot_seq = list()
-            for nucleotide in sequence:
-                onehot_seq.append(onehot_map[nucleotide.upper()])
-            onehot_data.append(onehot_seq)
-        return np.array(onehot_data)
+        # onehot_data = list()
+        # for sequence in seqs:
+        #     onehot_seq = list()
+        #     for nucleotide in sequence:
+        #         onehot_seq.append(onehot_map[nucleotide.upper()])
+        #     onehot_data.append(onehot_seq)
+        return onehot_data
 
     def get_data_at_coordinates(self, coordinates_df, genome_fasta,
                                 window_len, batch_size):
@@ -148,9 +150,8 @@ class ConstructSets(AccessGenome):
                                                    size=len(coords))
         coords['s_start'] = coords['start'] + coords['random_shift'] - int(self.L/2)
         coords['s_end'] = coords['start'] + coords['random_shift'] + int(self.L/2)
-
         # making a new dataFrame containing the new shifted coords.
-        shifted_coords = coords[['chr', 's_start', 's_end']]
+        shifted_coords = coords.loc[:, ('chr', 's_start', 's_end')]
         shifted_coords.columns = ['chr', 'start', 'end']
 
         return shifted_coords
@@ -180,8 +181,9 @@ class ConstructSets(AccessGenome):
                                                   g=self.genome_sizes_file,
                                                   incl=self.curr_genome_bed.fn,
                                                   excl=self.exclusion_bdt_obj.fn)
+
         negative_sample = negative_sample_bdt_obj.to_dataframe()
-        negative_sample.columns = ['chr', 'start', 'end'] # naming such that the
+        negative_sample.columns = ['chr', 'start', 'end']  # naming such that the
         # column names are consistent with positive_samples
 
         # adding in labels:

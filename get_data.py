@@ -41,7 +41,7 @@ def get_train_and_val_generators(genome_sizes, peaks, blacklist, fa):
                                      blacklist_file=blacklist,
                                      genome_fasta_file=fa,
                                      window_lenght=500,
-                                     batch_size=10000,
+                                     batch_size=500,
                                      to_filter=None,
                                      to_keep=validation_chrs)
 
