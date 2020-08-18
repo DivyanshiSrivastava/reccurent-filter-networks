@@ -6,27 +6,19 @@ using this same schema with recurrent nueral filters.
 Note: The code structure should remain similar for the RNF architectures.
 """
 
-import numpy as np
-import keras
-import argparse
-import os, subprocess
+import subprocess
 
 # sk-learn imports
-from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score
 from sklearn.metrics import average_precision_score
 
 # keras imports
-from keras.callbacks import EarlyStopping
-from keras.models import Model
-from keras.layers import Dense, Dropout, Activation, Flatten, Input
-from keras.layers import Conv1D, MaxPooling1D, LSTM, Reshape
-from keras.layers import TimeDistributed
-from keras.optimizers import SGD
-from keras.engine import Layer
-import keras.backend as K
+from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Dense, Dropout, Activation, Flatten, Input
+from tensorflow.keras.layers import Conv1D, MaxPooling1D, LSTM, Reshape
+from tensorflow.keras.optimizers import SGD
 
-import process_data
 import get_data
 
 
