@@ -174,6 +174,8 @@ class ConstructSets(AccessGenome):
         positive_sample = positive_sample.iloc[:, 0:3]
         # applying a random shift that returns 200 bp windows.
         positive_sample_w_shift = self.apply_random_shift(positive_sample)
+        lens = (positive_sample_w_shift['end'] - positive_sample_w_shift['start'])
+        print(np.sort(np.array(lens)))
         # creating a BedTool object for further use:
         positive_sample_bdt_obj = BedTool.from_dataframe(positive_sample_w_shift)
 
@@ -181,10 +183,13 @@ class ConstructSets(AccessGenome):
                                                   g=self.genome_sizes_file,
                                                   incl=self.curr_genome_bed.fn,
                                                   excl=self.exclusion_bdt_obj.fn)
-
         negative_sample = negative_sample_bdt_obj.to_dataframe()
         negative_sample.columns = ['chr', 'start', 'end']  # naming such that the
         # column names are consistent with positive_samples
+        lens_ng = (negative_sample['end']-negative_sample['start'])
+        print(np.sort(np.array(lens_ng)))
+
+
 
         # adding in labels:
         positive_sample_w_shift['label'] = 1
