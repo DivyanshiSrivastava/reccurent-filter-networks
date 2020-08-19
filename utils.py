@@ -4,6 +4,7 @@ DNA sequence data.
 """
 import pandas as pd
 from pybedtools import Interval, BedTool
+import numpy as np
 
 
 def filter_chromosomes(input_df, to_filter=None, to_keep=None):
@@ -28,7 +29,8 @@ def filter_chromosomes(input_df, to_filter=None, to_keep=None):
         for chromosome in to_filter:
             # note: using the str.contains method to remove all
             # contigs; for example: chrUn_JH584304
-            output_df = output_df[~(input_df['chr'].str.contains(chromosome))]
+            bool_filter = ~(output_df['chr'].str.contains(chromosome))
+            output_df = output_df[bool_filter]
     elif to_keep:
         # keep only the to_keep chromosomes:
         # note: this is slightly different from to_filter, because
@@ -79,8 +81,21 @@ def get_genome_sizes(genome_sizes_file, to_filter=None, to_keep=None):
                                            to_keep=to_keep)
 
     genome_bed_data = []
+    # Note: Modifying this to deal with unexpected (incorrect) edge case \
+    # BedTools shuffle behavior.
+    # While shuffling data, BedTools shuffle is placing certain windows at the \
+    # edge of a chromosome
+    # Why it's doing that is unclear; will open an issue on GitHub.
+    # It's probably placing the "start" co-ordinate within limits of the genome,
+    # with the end coordinate not fitting.
+    # This leads to the fasta file returning an incomplete sequence \
+    # (< 500 base pairs)
+    # This breaks the generator feeding into Model.fit.
+    # Therefore, in the genome sizes file, buffering 550 from the edges
+    # to allow for BedTools shuffle to place window without running of the
+    # chromosome.
     for chrom, sizes in genome_sizes_filt.values:
-        genome_bed_data.append(Interval(chrom, 0, sizes))
+        genome_bed_data.append(Interval(chrom, 0 + 550, sizes - 550))
     genome_bed_data = BedTool(genome_bed_data)
     return genome_bed_data
 
@@ -147,8 +162,11 @@ def exclusion_regions(blacklist_file, chip_seq_data):
     temp_chip_file = chip_seq_data.copy()  # Doesn't modify OG array.
     temp_chip_file['start'] = temp_chip_file['start'] - 250
     temp_chip_file['end'] = temp_chip_file['end'] + 250
+
     bound_exclusion_windows = BedTool.from_dataframe(temp_chip_file[['chr', 'start','end']])
     blacklist_exclusion_windows = BedTool(blacklist_file)
     exclusion_windows = BedTool.cat(
         *[blacklist_exclusion_windows, bound_exclusion_windows])
     return bound_exclusion_windows, exclusion_windows
+
+

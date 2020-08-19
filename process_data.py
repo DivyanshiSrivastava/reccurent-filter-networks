@@ -23,6 +23,7 @@ from pybedtools import BedTool
 
 # local imports
 import utils
+import sys
 
 
 class AccessGenome:
@@ -49,7 +50,6 @@ class AccessGenome:
         # note: converting all lower-case nucleotides into upper-case here.
         onehot_seqs = [onehot_map[x.upper()] for seq in seqs for x in seq]
         onehot_data = np.reshape(onehot_seqs, newshape=(batch_size, window_length, 4))
-        print(onehot_data.shape)
         # remove the reshaping step:
         # onehot_data = list()
         # for sequence in seqs:
@@ -86,8 +86,18 @@ class AccessGenome:
         """
         batch_y = coordinates_df['label']
         batch_X = []
+        seq_len = []
+        id = 0
         for chrom, start, stop, y in coordinates_df.values:
-            batch_X.append(genome_fasta[chrom][int(start):int(stop)])
+            fa_seq = genome_fasta[chrom][int(start):int(stop)]
+            batch_X.append(fa_seq)
+            seq_len.append(len(fa_seq))
+            if len(fa_seq) != 500:
+                print(id)
+                print(fa_seq)
+            id +=1
+
+        print((np.array(seq_len)))
         # converting this data into onehot
         batch_X_onehot = AccessGenome.get_onehot_array(batch_X,
                                                        window_length=window_len,
@@ -148,6 +158,7 @@ class ConstructSets(AccessGenome):
         high = int(self.L/2 - 25)
         coords['random_shift'] = np.random.randint(low=low, high=high,
                                                    size=len(coords))
+
         coords['s_start'] = coords['start'] + coords['random_shift'] - int(self.L/2)
         coords['s_end'] = coords['start'] + coords['random_shift'] + int(self.L/2)
         # making a new dataFrame containing the new shifted coords.
@@ -175,22 +186,28 @@ class ConstructSets(AccessGenome):
         # applying a random shift that returns 200 bp windows.
         positive_sample_w_shift = self.apply_random_shift(positive_sample)
         lens = (positive_sample_w_shift['end'] - positive_sample_w_shift['start'])
-        print(np.sort(np.array(lens)))
+        # print("Printing the Data and Length of positive co-ordinates")
+        # print(positive_sample_w_shift)
+        # print((np.array(lens)))
+        positive_sample_w_shift.to_csv("out.pos.bed")
+
+
         # creating a BedTool object for further use:
         positive_sample_bdt_obj = BedTool.from_dataframe(positive_sample_w_shift)
+
+        # print(self.curr_genome_bed)
 
         negative_sample_bdt_obj = BedTool.shuffle(positive_sample_bdt_obj,
                                                   g=self.genome_sizes_file,
                                                   incl=self.curr_genome_bed.fn,
                                                   excl=self.exclusion_bdt_obj.fn)
         negative_sample = negative_sample_bdt_obj.to_dataframe()
+        # print("Printing the Data and Length of negative co-ordinates")
         negative_sample.columns = ['chr', 'start', 'end']  # naming such that the
-        # column names are consistent with positive_samples
-        lens_ng = (negative_sample['end']-negative_sample['start'])
-        print(np.sort(np.array(lens_ng)))
-
-
-
+        ng_lens = (negative_sample['end'] - negative_sample['start'])
+        # print(negative_sample)
+        # print((np.array(ng_lens)))
+        negative_sample.to_csv("neg.pos.bed")
         # adding in labels:
         positive_sample_w_shift['label'] = 1
         negative_sample['label'] = 0
@@ -198,7 +215,7 @@ class ConstructSets(AccessGenome):
         # mixing and shuffling positive and negative set:
         training_coords = pd.concat([positive_sample_w_shift, negative_sample])
         # randomly shuffle the dataFrame
-        training_coords = training_coords.sample(frac=1)
+        # training_coords = training_coords.sample(frac=1)
         return training_coords
 
     def get_data(self):
@@ -262,7 +279,6 @@ class TestSet(AccessGenome):
         chip_peaks = utils.load_chipseq_data(chip_peaks_file=self.peaks_file,
                                              to_keep=self.to_keep,
                                              genome_sizes_file=self.genome_sizes_file)
-        print(chip_peaks)
         # note: multiGPS reports 1 bp separated start and end,
         # centered on the ChIP-seq peak.
         chip_peaks['start'] = chip_peaks['start'] - int(self.window_len/2)
@@ -335,14 +351,17 @@ def data_generator(genome_sizes_file, peaks_file, genome_fasta_file,
     # load the genome_sizes_file:
     genome_bed_val = utils.get_genome_sizes(genome_sizes_file, to_keep=to_keep,
                                             to_filter=to_filter)
+
     # loading the chip-seq bed file
     chip_seq_coordinates = utils.load_chipseq_data(peaks_file,
                                                    genome_sizes_file=genome_sizes_file,
                                                    to_keep=to_keep,
                                                    to_filter=to_filter)
+
+
     # loading the exclusion coords:
     chipseq_exclusion_windows, exclusion_windows_bdt = utils.exclusion_regions(blacklist_file,
-                                                    chip_seq_coordinates)
+                                                                               chip_seq_coordinates)
     # constructing the training set
     construct_sets = ConstructSets(genome_sizes_file=genome_sizes_file,
                                    genome_fasta_file=genome_fasta_file,
@@ -365,7 +384,3 @@ def get_test_data(genome_sizes_file, peaks_file, genome_fasta_file,
                  window_len=window_len, stride=stride, to_keep=to_keep)
     X_test, y_test, coords = ts.get_data()
     return X_test, y_test, coords
-
-
-
-
