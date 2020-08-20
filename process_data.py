@@ -87,17 +87,11 @@ class AccessGenome:
         batch_y = coordinates_df['label']
         batch_X = []
         seq_len = []
-        id = 0
         for chrom, start, stop, y in coordinates_df.values:
             fa_seq = genome_fasta[chrom][int(start):int(stop)]
             batch_X.append(fa_seq)
             seq_len.append(len(fa_seq))
-            if len(fa_seq) != 500:
-                print(id)
-                print(fa_seq)
-            id +=1
 
-        print((np.array(seq_len)))
         # converting this data into onehot
         batch_X_onehot = AccessGenome.get_onehot_array(batch_X,
                                                        window_length=window_len,
@@ -215,7 +209,7 @@ class ConstructSets(AccessGenome):
         # mixing and shuffling positive and negative set:
         training_coords = pd.concat([positive_sample_w_shift, negative_sample])
         # randomly shuffle the dataFrame
-        # training_coords = training_coords.sample(frac=1)
+        training_coords = training_coords.sample(frac=1)
         return training_coords
 
     def get_data(self):
