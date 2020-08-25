@@ -17,7 +17,7 @@ from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Dense, Dropout, Activation, Flatten, Input
 from tensorflow.keras.layers import Conv1D, MaxPooling1D, LSTM, Reshape
-from tensorflow.keras.optimizers import SGD
+from tensorflow.keras.optimizers import SGD, Adam
 
 import get_data
 
@@ -42,6 +42,8 @@ class ConvNet:
         seq_input = Input(shape=(self.window_len, 4,), name='seq')
         xs = Conv1D(filters=self.n_filters, kernel_size=self.filter_size,
                     activation='relu')(seq_input)
+        xs = Conv1D(filters=self.n_filters, kernel_size=self.filter_size,
+                    activation='relu')(xs)
         xs = MaxPooling1D(padding="same", strides=self.pooling_stride,
                           pool_size=self.pooling_size)(xs)
         xs = LSTM(32, activation='relu')(xs)
@@ -55,14 +57,15 @@ class ConvNet:
 
     def fit_the_data(self, model_cnn, train_gen, val_gen):
         # fit the data
-        sgd = SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
+        adam = Adam(learning_rate=0.001)
+        # sgd = SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
         model_cnn.compile(loss='binary_crossentropy',
-                          optimizer=sgd, metrics=['accuracy'])
+                          optimizer=adam, metrics=['accuracy'])
         earlystop = EarlyStopping(monitor='val_loss', mode='min',
-                                  verbose=1, min_delta=0.01, patience=15)
+                                  verbose=1, min_delta=0.01, patience=10)
         model_cnn.fit(train_gen,
-                      steps_per_epoch=2000,
-                      epochs=500,
+                      steps_per_epoch=10000,
+                      epochs=100,
                       validation_data=next(val_gen),
                       callbacks=[earlystop])
 
@@ -86,7 +89,6 @@ class ConvNet:
 
         model.save(results_dir + '/model.hdf5')
         return auroc, auprc
-
 
 
 def train_model(genome_size, fa, peaks, blacklist, results_dir):

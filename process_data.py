@@ -148,8 +148,8 @@ class ConstructSets(AccessGenome):
             shifted_coords(pandas dataFrame): The output bedfile with shifted coords
         """
         # defining the random shift
-        low = int(-self.L/2 + 25)
-        high = int(self.L/2 - 25)
+        low = int(-self.L/2 + 50)
+        high = int(self.L/2 - 50)
         coords['random_shift'] = np.random.randint(low=low, high=high,
                                                    size=len(coords))
 
