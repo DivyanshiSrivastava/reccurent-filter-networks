@@ -169,7 +169,8 @@ class ConstructSets(AccessGenome):
 
         The unbound/negative set is chosen randomly from the genome.
         """
-        positive_sample_size = int(self.batch_size/2)
+        # First taking 500 examples, and then subsetting subsequently.
+        positive_sample_size = int(self.batch_size)
 
         # taking a sample from the chip_coords file,
         # i.e. sub-setting 50 rows from self.chip_coords
@@ -208,6 +209,9 @@ class ConstructSets(AccessGenome):
 
         # mixing and shuffling positive and negative set:
         training_coords = pd.concat([positive_sample_w_shift, negative_sample])
+        # positive: negative ratio = 1: 2
+        training_coords = pd.concat([positive_sample_w_shift[:int(self.batch_size/3)],
+                                     negative_sample[int(self.batch_size/3):]])
         # randomly shuffle the dataFrame
         training_coords = training_coords.sample(frac=1)
         return training_coords
