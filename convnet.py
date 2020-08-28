@@ -55,16 +55,17 @@ class ConvNet:
         model = Model(inputs=seq_input, outputs=result)
         return model
 
-    def fit_the_data(self, model_cnn, train_gen, val_gen):
+    def fit_the_data(self, model_cnn, train_gen, val_gen, patience,
+                     steps_per_epoch):
         # fit the data
         adam = Adam(learning_rate=0.001)
         # sgd = SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
         model_cnn.compile(loss='binary_crossentropy',
                           optimizer=adam, metrics=['accuracy'])
         earlystop = EarlyStopping(monitor='val_loss', mode='min',
-                                  verbose=1, min_delta=0.01, patience=5)
+                                  verbose=1, min_delta=0.01, patience=patience)
         model_cnn.fit(train_gen,
-                      steps_per_epoch=500,
+                      steps_per_epoch=steps_per_epoch,
                       epochs=100,
                       validation_data=next(val_gen),
                       callbacks=[earlystop])
@@ -91,14 +92,18 @@ class ConvNet:
         return auroc, auprc
 
 
-def train_model(genome_size, fa, peaks, blacklist, results_dir):
+def train_model(genome_size, fa, peaks, blacklist, results_dir, batch_size,
+                steps, patience):
+
+    print(steps)
 
     print('getting the generators & test dataset')
     train_generator, val_generator, test_data = \
             get_data.get_train_and_val_generators(genome_sizes=genome_size,
                                                   fa=fa,
                                                   peaks=peaks,
-                                                  blacklist=blacklist)
+                                                  blacklist=blacklist,
+                                                  batch_size=batch_size)
 
     print('building convolutional architecture')
     architecture = ConvNet(window_len=500, n_filters=128, filter_size=24,
@@ -108,7 +113,9 @@ def train_model(genome_size, fa, peaks, blacklist, results_dir):
     print('fitting the model')
     fitted_model = architecture.fit_the_data(model_cnn=model,
                                              train_gen=train_generator,
-                                             val_gen=val_generator)
+                                             val_gen=val_generator,
+                                             patience=patience,
+                                             steps_per_epoch=steps)
     print('evaluating the model')
     architecture.evaluate_and_save_model(model=fitted_model,
                                          test_data_tuple=test_data,
