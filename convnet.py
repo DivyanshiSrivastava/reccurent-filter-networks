@@ -41,9 +41,11 @@ class ConvNet:
         """
         seq_input = Input(shape=(self.window_len, 4,), name='seq')
         xs = Conv1D(filters=self.n_filters, kernel_size=self.filter_size,
-                    activation='relu')(seq_input)
+                    padding='same')(seq_input)
+        xs = Activation('relu')(xs)
         xs = Conv1D(filters=self.n_filters, kernel_size=self.filter_size,
-                    activation='relu')(xs)
+                    padding='same')(xs)
+        xs = Activation('relu')(xs)
         xs = MaxPooling1D(padding="same", strides=self.pooling_stride,
                           pool_size=self.pooling_size)(xs)
         xs = LSTM(32, activation='relu')(xs)
