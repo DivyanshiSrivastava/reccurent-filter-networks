@@ -36,14 +36,13 @@ def get_train_and_val_generators(genome_sizes, peaks, blacklist, fa, batch_size)
                                      to_keep=None)
 
     validation_chrs = ['chr10']
-    vg = process_data.data_generator(genome_sizes_file=genome_sizes,
-                                     peaks_file=peaks,
-                                     blacklist_file=blacklist,
-                                     genome_fasta_file=fa,
-                                     window_lenght=500,
-                                     batch_size=500,
-                                     to_filter=None,
-                                     to_keep=validation_chrs)
+    validation_data = process_data.get_test_data(genome_fasta_file=fa,
+                                                 genome_sizes_file=genome_sizes,
+                                                 blacklist_file=blacklist,
+                                                 peaks_file=peaks,
+                                                 to_keep=validation_chrs,
+                                                 window_len=500,
+                                                 stride=500)
 
     test_chromosome = ['chr18']
     # Testing the class TestSet():
@@ -55,6 +54,6 @@ def get_train_and_val_generators(genome_sizes, peaks, blacklist, fa, batch_size)
                                            window_len=500,
                                            stride=500)
 
-    return tg, vg, test_data
+    return tg, validation_data, test_data
 
 

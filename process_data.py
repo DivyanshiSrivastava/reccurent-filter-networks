@@ -261,7 +261,8 @@ class TestSet(AccessGenome):
         genome_sizes = pd.read_csv(self.genome_sizes_file, sep="\t",
                                    names=['chr', 'len'])
         # subset the test chromosome:
-        genome_test = genome_sizes[genome_sizes['chr'] == 'chr10']
+        genome_test = genome_sizes[genome_sizes['chr'] == self.to_keep[0]]
+        # the assumption here is that to_keep is a single chromosome list.
         end_idx = genome_test.iloc[0, 1]
         chromosome = genome_test.iloc[0, 0]
         test_set = []

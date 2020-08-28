@@ -57,7 +57,7 @@ class ConvNet:
         model = Model(inputs=seq_input, outputs=result)
         return model
 
-    def fit_the_data(self, model_cnn, train_gen, val_gen, patience,
+    def fit_the_data(self, model_cnn, train_gen, val_data, patience,
                      steps_per_epoch):
         # fit the data
         adam = Adam(learning_rate=0.001)
@@ -69,7 +69,7 @@ class ConvNet:
         model_cnn.fit(train_gen,
                       steps_per_epoch=steps_per_epoch,
                       epochs=100,
-                      validation_data=next(val_gen),
+                      validation_data=val_data,
                       callbacks=[earlystop])
 
         return model_cnn
@@ -100,7 +100,7 @@ def train_model(genome_size, fa, peaks, blacklist, results_dir, batch_size,
     print(steps)
 
     print('getting the generators & test dataset')
-    train_generator, val_generator, test_data = \
+    train_generator, val_data, test_data = \
             get_data.get_train_and_val_generators(genome_sizes=genome_size,
                                                   fa=fa,
                                                   peaks=peaks,
@@ -113,9 +113,11 @@ def train_model(genome_size, fa, peaks, blacklist, results_dir, batch_size,
                            dropout_freq=0.5, dense_size=128)
     model = architecture.get_model()
     print('fitting the model')
+    # parsing the validation data tuple. (same as that returned be test data)
+    x_val, y_val, bed_coords_val = val_data
     fitted_model = architecture.fit_the_data(model_cnn=model,
                                              train_gen=train_generator,
-                                             val_gen=val_generator,
+                                             val_data=(x_val, y_val),
                                              patience=patience,
                                              steps_per_epoch=steps)
     print('evaluating the model')
