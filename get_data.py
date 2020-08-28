@@ -24,14 +24,14 @@ def save_test_set(file_name, test_data, outdir):
     return None
 
 
-def get_train_and_val_generators(genome_sizes, peaks, blacklist, fa):
+def get_train_and_val_generators(genome_sizes, peaks, blacklist, fa, batch_size):
     filter_chrs_for_training = ['chr10', 'chr18', 'chrUn', 'chrM', 'random']
     tg = process_data.data_generator(genome_sizes_file=genome_sizes,
                                      peaks_file=peaks,
                                      blacklist_file=blacklist,
                                      genome_fasta_file=fa,
                                      window_lenght=500,
-                                     batch_size=500,
+                                     batch_size=batch_size,
                                      to_filter=filter_chrs_for_training,
                                      to_keep=None)
 
