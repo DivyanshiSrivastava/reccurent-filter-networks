@@ -11,6 +11,7 @@ if __name__ == "__main__":
     parser.add_argument('--batch_size', type=int, help='batch_size')
     parser.add_argument('--steps_per_epoch', type=int, help='steps_per_epoch')
     parser.add_argument('--patience', type=int, help='patience')
+    parser.add_argument('--acc_regions_file', help='BED file:accessible regions')
 
     args = parser.parse_args()
 
@@ -18,5 +19,6 @@ if __name__ == "__main__":
     convnet.train_model(genome_size=args.genome_sizes, peaks=args.peaks,
                         blacklist=args.blacklist, fa=args.fa,
                         results_dir=args.results_dir, batch_size=args.batch_size,
-                        steps=args.steps_per_epoch, patience=args.patience)
+                        steps=args.steps_per_epoch, patience=args.patience,
+                        acc_regions_file=args.acc_regions_file)
 

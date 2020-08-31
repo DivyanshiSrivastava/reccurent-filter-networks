@@ -18,8 +18,25 @@ from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Dense, Dropout, Activation, Flatten, Input
 from tensorflow.keras.layers import Conv1D, MaxPooling1D, LSTM, Reshape
 from tensorflow.keras.optimizers import SGD, Adam
+from tensorflow.keras.callbacks import Callback
+
 
 import get_data
+
+
+# using a callback to access validation data and access auPRC at each
+# epoch
+class PrecisionRecall(Callback):
+    def on_train_begin(self, logs=None):
+        self.val_auprc = []
+        self.train_auprc = []
+
+    def on_epoch_end(self, epoch, logs=None):
+        """ monitor PR """
+        x_val, y_val = self.validation_data[0], self.validation_data[1]
+        predictions = self.model.predict(x_val)
+        au_prc = average_precision_score(y_val, predictions)
+        self.val_auprc.append(au_prc)
 
 
 class ConvNet:
@@ -95,7 +112,7 @@ class ConvNet:
 
 
 def train_model(genome_size, fa, peaks, blacklist, results_dir, batch_size,
-                steps, patience):
+                steps, patience, acc_regions_file):
 
     print(steps)
 
@@ -105,7 +122,8 @@ def train_model(genome_size, fa, peaks, blacklist, results_dir, batch_size,
                                                   fa=fa,
                                                   peaks=peaks,
                                                   blacklist=blacklist,
-                                                  batch_size=batch_size)
+                                                  batch_size=batch_size,
+                                                  acc_regions_file=acc_regions_file)
 
     print('building convolutional architecture')
     architecture = ConvNet(window_len=500, n_filters=128, filter_size=24,

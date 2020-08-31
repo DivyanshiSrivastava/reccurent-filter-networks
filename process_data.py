@@ -108,7 +108,7 @@ class ConstructSets(AccessGenome):
 
     def __init__(self, genome_sizes_file, genome_fasta_file, blacklist_file,
                  chip_coords, window_length, exclusion_btd_obj,
-                 curr_genome_bed, batch_size):
+                 curr_genome_bed, batch_size, acc_regions_file):
         super().__init__(genome_fasta_file)
         self.genome_sizes_file = genome_sizes_file
         self.blacklist_file = blacklist_file
@@ -117,6 +117,7 @@ class ConstructSets(AccessGenome):
         self.exclusion_bdt_obj = exclusion_btd_obj
         self.curr_genome_bed = curr_genome_bed
         self.batch_size = batch_size
+        self.acc_regions_file = acc_regions_file
 
     def apply_random_shift(self, coords):
         """
@@ -191,7 +192,7 @@ class ConstructSets(AccessGenome):
         positive_sample_bdt_obj = BedTool.from_dataframe(positive_sample_w_shift)
 
         # print(self.curr_genome_bed)
-
+        # negative samples/random
         negative_sample_bdt_obj = BedTool.shuffle(positive_sample_bdt_obj,
                                                   g=self.genome_sizes_file,
                                                   incl=self.curr_genome_bed.fn,
@@ -199,19 +200,29 @@ class ConstructSets(AccessGenome):
         negative_sample = negative_sample_bdt_obj.to_dataframe()
         # print("Printing the Data and Length of negative co-ordinates")
         negative_sample.columns = ['chr', 'start', 'end']  # naming such that the
-        ng_lens = (negative_sample['end'] - negative_sample['start'])
-        # print(negative_sample)
-        # print((np.array(ng_lens)))
-        negative_sample.to_csv("neg.pos.bed")
+
+        # get unbound accessible sites in the training chromosomes:
+        unbound_acc_bdt = BedTool.intersect(a=self.acc_regions_file,
+                                            b=self.curr_genome_bed.fn,
+                                            v=True)
+        # negative samples/pre-accessible
+        negative_sample_bdt_obj_acc = BedTool.shuffle(positive_sample_bdt_obj,
+                                                      g=self.genome_sizes_file,
+                                                      incl=unbound_acc_bdt.fn,
+                                                      excl=self.exclusion_bdt_obj.fn)
+        negative_sample_acc = negative_sample_bdt_obj_acc.to_dataframe()
+        negative_sample_acc.columns = ['chr', 'start', 'end']
         # adding in labels:
         positive_sample_w_shift['label'] = 1
         negative_sample['label'] = 0
+        negative_sample_acc['label'] = 0
 
         # mixing and shuffling positive and negative set:
-        training_coords = pd.concat([positive_sample_w_shift, negative_sample])
+        training_coords = pd.concat([positive_sample_w_shift, negative_sample, negative_sample_acc])
         # positive: negative ratio = 1: 2
         training_coords = pd.concat([positive_sample_w_shift[:int(self.batch_size/3)],
-                                     negative_sample[int(self.batch_size/3):]])
+                                     negative_sample[int(self.batch_size/3):(2 * int(self.batch_size/3))],
+                                     negative_sample_acc[2 * int(self.batch_size/3):]])
         # randomly shuffle the dataFrame
         training_coords = training_coords.sample(frac=1)
         return training_coords
@@ -324,7 +335,7 @@ class TestSet(AccessGenome):
 
 def data_generator(genome_sizes_file, peaks_file, genome_fasta_file,
                    blacklist_file, to_keep, to_filter,
-                   window_lenght, batch_size=100):
+                   window_lenght, batch_size, acc_regions_file):
     """
     This generator can either generate training data or validation data based on
     the to_keep and to_filter arguments.
@@ -369,7 +380,8 @@ def data_generator(genome_sizes_file, peaks_file, genome_fasta_file,
                                    exclusion_btd_obj=exclusion_windows_bdt,
                                    window_length=window_lenght,
                                    curr_genome_bed=genome_bed_val,
-                                   batch_size=batch_size)
+                                   batch_size=batch_size,
+                                   acc_regions_file=acc_regions_file)
     while True:
         X, y, coords = construct_sets.get_data()
         yield X, y
