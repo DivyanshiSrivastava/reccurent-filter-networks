@@ -27,6 +27,11 @@ import get_data
 # using a callback to access validation data and access auPRC at each
 # epoch
 class PrecisionRecall(Callback):
+
+    def __init__(self, val_data):
+        super().__init__()
+        self.validation_data = val_data
+
     def on_train_begin(self, logs=None):
         self.val_auprc = []
         self.train_auprc = []
