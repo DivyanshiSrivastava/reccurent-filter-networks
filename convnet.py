@@ -36,6 +36,7 @@ class PrecisionRecall(Callback):
         x_val, y_val = self.validation_data[0], self.validation_data[1]
         predictions = self.model.predict(x_val)
         au_prc = average_precision_score(y_val, predictions)
+        print(au_prc)
         self.val_auprc.append(au_prc)
 
 
@@ -81,14 +82,15 @@ class ConvNet:
         # sgd = SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
         model_cnn.compile(loss='binary_crossentropy',
                           optimizer=adam, metrics=['accuracy'])
+        precision_recall_history = PrecisionRecall()
         earlystop = EarlyStopping(monitor='val_loss', mode='min',
                                   verbose=1, min_delta=0.01, patience=patience)
         model_cnn.fit(train_gen,
                       steps_per_epoch=steps_per_epoch,
                       epochs=100,
                       validation_data=val_data,
-                      callbacks=[earlystop])
-
+                      callbacks=[earlystop, precision_recall_history])
+        print(precision_recall_history.val_auprc)
         return model_cnn
 
     def evaluate_and_save_model(self, model, test_data_tuple, results_dir):
