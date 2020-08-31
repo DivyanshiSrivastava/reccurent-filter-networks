@@ -202,7 +202,8 @@ class ConstructSets(AccessGenome):
         negative_sample.columns = ['chr', 'start', 'end']  # naming such that the
 
         # get unbound accessible sites in the training chromosomes:
-        unbound_acc_bdt = self.acc_regions_file.intersect(self.curr_genome_bed.fn, v=True)
+        acc_regions_bdt = BedTool(self.acc_regions_file)
+        unbound_acc_bdt = acc_regions_bdt.intersect(self.curr_genome_bed.fn, v=True)
         # negative samples/pre-accessible
         negative_sample_bdt_obj_acc = BedTool.shuffle(positive_sample_bdt_obj,
                                                       g=self.genome_sizes_file,
