@@ -29,6 +29,9 @@ import get_data
 class PrecisionRecall(Callback):
 
     def __init__(self, val_data):
+        # Passing val data as tf.keras callback is not setting the
+        # self.validation parameter.
+        # Look into this more,
         super().__init__()
         self.validation_data = val_data
 
@@ -87,7 +90,7 @@ class ConvNet:
         # sgd = SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
         model_cnn.compile(loss='binary_crossentropy',
                           optimizer=adam, metrics=['accuracy'])
-        precision_recall_history = PrecisionRecall()
+        precision_recall_history = PrecisionRecall(val_data=val_data)
         earlystop = EarlyStopping(monitor='val_loss', mode='min',
                                   verbose=1, min_delta=0.01, patience=patience)
         model_cnn.fit(train_gen,
