@@ -44,7 +44,7 @@ class PrecisionRecall(Callback):
         x_val, y_val = self.validation_data[0], self.validation_data[1]
         predictions = self.model.predict(x_val)
         au_prc = average_precision_score(y_val, predictions)
-        print(au_prc)
+        print("\nau-PRC:", au_prc)
         self.val_auprc.append(au_prc)
 
 

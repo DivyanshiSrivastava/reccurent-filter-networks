@@ -221,7 +221,7 @@ class ConstructSets(AccessGenome):
         # positive: negative ratio = 1: 2
         training_coords = pd.concat([positive_sample_w_shift[:int(self.batch_size/3)],
                                      negative_sample[int(self.batch_size/3):(2 * int(self.batch_size/3))],
-                                     negative_sample_acc[2 * int(self.batch_size/3):]])
+                                     negative_sample_acc[(2 * int(self.batch_size/3)):]])
         # randomly shuffle the dataFrame
         training_coords = training_coords.sample(frac=1)
         return training_coords
