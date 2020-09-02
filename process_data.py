@@ -61,6 +61,7 @@ class AccessGenome:
 
     def rev_comp(self, inp_str):
         rc_dict = {'A': 'T', 'G': 'C', 'T': 'A', 'C': 'G'}
+        #, 'c': 'g', 'g': 'c', 't': 'a', 'a': 't', 'n': 'n', 'N': 'N'}
         outp_str = list()
         for nucl in inp_str:
             outp_str.append(rc_dict[nucl])
@@ -101,6 +102,13 @@ class AccessGenome:
         for chrom, start, stop, y in coordinates_df.values:
             fa_seq = genome_fasta[chrom][int(start):int(stop)]
             print(fa_seq)
+            nseq = ''.join(list(np.repeat('N', 500)))
+            if fa_seq is nseq:
+                print(fa_seq)
+                print(chrom)
+                print(start)
+                print(stop)
+                print(y)
             # Adding reverse complements into the training process:
             if idx <= int(pos_batch_size/2):
                 batch_X.append(fa_seq)
