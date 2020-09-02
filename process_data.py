@@ -61,8 +61,8 @@ class AccessGenome:
         return onehot_data
 
     def rev_comp(self, inp_str):
-        rc_dict = {'A': 'T', 'G': 'C', 'T': 'A', 'C': 'G'}
-        #, 'c': 'g', 'g': 'c', 't': 'a', 'a': 't', 'n': 'n', 'N': 'N'}
+        rc_dict = {'A': 'T', 'G': 'C', 'T': 'A', 'C': 'G', 'c': 'g',
+                   'g': 'c', 't': 'a', 'a': 't', 'n': 'n', 'N': 'N'}
         outp_str = list()
         for nucl in inp_str:
             outp_str.append(rc_dict[nucl])
@@ -97,15 +97,16 @@ class AccessGenome:
         batch_X = []
         seq_len = []
 
-        pos_batch_size = len(batch_y)
-
+        batch_size = len(batch_y)
+        idx = 0
         for chrom, start, stop, y in coordinates_df.values:
             fa_seq = genome_fasta[chrom][int(start):int(stop)]
             # Adding reverse complements into the training process:
-            if idx <= int(pos_batch_size/2):
+            if idx <= int(batch_size/2):
                 batch_X.append(fa_seq)
             else:
                 batch_X.append(self.rev_comp(fa_seq))
+            idx += 1
             seq_len.append(len(fa_seq))
         # converting this data into onehot
         batch_X_onehot = AccessGenome.get_onehot_array(batch_X,
@@ -216,21 +217,28 @@ class ConstructSets(AccessGenome):
         negative_sample.columns = ['chr', 'start', 'end']  # naming such that the
 
         # get flanking regions in the negative set;
-        postive_set = self.chip_coords
         flanks_left = self.chip_coords.copy()
         flanks_right = self.chip_coords.copy()
-
-        flanks_left['start'] = self.chip_coords['start'] - 1250
-        flanks_left['end'] = self.chip_coords['end'] - 750
-        flanks_right['start'] = self.chip_coords['start'] + 750
-        flanks_right['end'] = self.chip_coords['end'] + 1250
+        flanks_left['start'] = self.chip_coords['start'] - 1550
+        flanks_left['end'] = self.chip_coords['end'] - 1050
+        flanks_right['start'] = self.chip_coords['start'] + 1050
+        flanks_right['end'] = self.chip_coords['end'] + 1550
+        print("Len of chip_coords")
+        print(len(self.chip_coords))
+        print(len(flanks_right))
+        print(len(flanks_left))
 
         flanking_windows = pd.concat([flanks_left, flanks_right])
-        print(flanking_windows)
+        print(len(flanking_windows))
+
+        # get flanking windows in training chromosomes only:
+        flanks_bdt = BedTool(flanking_windows)
+        flanks_training = flanks_bdt.intersect(self.curr_genome_bed.fn)
+        flanks_df = flanks_training.to_dataframe()
 
         # get unbound accessible sites in the training chromosomes:
         acc_regions_bdt = BedTool(self.acc_regions_file)
-        unbound_acc_bdt = acc_regions_bdt.intersect(self.curr_genome_bed.fn, v=True)
+        unbound_acc_bdt = acc_regions_bdt.intersect(self.curr_genome_bed.fn)
         # negative samples/pre-accessible
         negative_sample_bdt_obj_acc = BedTool.shuffle(positive_sample_bdt_obj,
                                                       g=self.genome_sizes_file,
@@ -242,19 +250,24 @@ class ConstructSets(AccessGenome):
         positive_sample_w_shift['label'] = 1
         negative_sample['label'] = 0
         negative_sample_acc['label'] = 0
-
-
+        flanking_windows['label'] = 0
+        print("In training regime")
+        print("pos_sample_wuhuu")
         print(positive_sample_w_shift)
+        print("neg_sample_random")
         print(negative_sample)
+        print("neg_sample_acc")
         print(negative_sample_acc)
-        print(flanking_windows)
+        print("neg_sample_flanks")
+        print(flanks_df)
 
         exit()
         # mixing and shuffling positive and negative set:
-        training_coords = pd.concat([positive_sample_w_shift, negative_sample, negative_sample_acc])
+        training_coords = pd.concat([positive_sample_w_shift, negative_sample,
+                                     negative_sample_acc, flanks_df])
         # positive: negative ratio = 1: 2
         training_coords = pd.concat([positive_sample_w_shift[:int(self.batch_size/3)],
-                                     negative_sample[int(self.batch_size/3):(2 * int(self.batch_size/3))],
+                                     flanks_df[int(self.batch_size/3):(2 * int(self.batch_size/3))],
                                      negative_sample_acc[(2 * int(self.batch_size/3)):]])
         # randomly shuffle the dataFrame
         training_coords = training_coords.sample(frac=1)
@@ -394,7 +407,6 @@ def data_generator(genome_sizes_file, peaks_file, genome_fasta_file,
     # load the genome_sizes_file:
     genome_bed_val = utils.get_genome_sizes(genome_sizes_file, to_keep=to_keep,
                                             to_filter=to_filter)
-
     # loading the chip-seq bed file
     chip_seq_coordinates = utils.load_chipseq_data(peaks_file,
                                                    genome_sizes_file=genome_sizes_file,
