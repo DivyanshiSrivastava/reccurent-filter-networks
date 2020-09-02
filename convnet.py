@@ -69,9 +69,6 @@ class ConvNet:
         xs = Conv1D(filters=self.n_filters, kernel_size=self.filter_size,
                     padding='same')(seq_input)
         xs = Activation('relu')(xs)
-        xs = Conv1D(filters=self.n_filters, kernel_size=self.filter_size,
-                    padding='same')(xs)
-        xs = Activation('relu')(xs)
         xs = MaxPooling1D(padding="same", strides=self.pooling_stride,
                           pool_size=self.pooling_size)(xs)
         xs = LSTM(32, activation='relu')(xs)
@@ -136,8 +133,8 @@ def train_model(genome_size, fa, peaks, blacklist, results_dir, batch_size,
                                                   acc_regions_file=acc_regions_file)
 
     print('building convolutional architecture')
-    architecture = ConvNet(window_len=500, n_filters=128, filter_size=24,
-                           pooling_stride=8, pooling_size=8, n_dense_layers=3,
+    architecture = ConvNet(window_len=500, n_filters=128, filter_size=20,
+                           pooling_stride=15, pooling_size=15, n_dense_layers=2,
                            dropout_freq=0.5, dense_size=128)
     model = architecture.get_model()
     print('fitting the model')

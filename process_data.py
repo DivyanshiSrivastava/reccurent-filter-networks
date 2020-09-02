@@ -59,6 +59,13 @@ class AccessGenome:
         #     onehot_data.append(onehot_seq)
         return onehot_data
 
+    def rev_comp(self, inp_str):
+        rc_dict = {'A': 'T', 'G': 'C', 'T': 'A', 'C': 'G'}
+        outp_str = list()
+        for nucl in inp_str:
+            outp_str.append(rc_dict[nucl])
+        return ''.join(outp_str)
+
     def get_data_at_coordinates(self, coordinates_df, genome_fasta,
                                 window_len, batch_size):
         """
@@ -87,11 +94,20 @@ class AccessGenome:
         batch_y = coordinates_df['label']
         batch_X = []
         seq_len = []
+
+        pos_batch_size = len(batch_y)
+
+        idx = 0
         for chrom, start, stop, y in coordinates_df.values:
             fa_seq = genome_fasta[chrom][int(start):int(stop)]
-            batch_X.append(fa_seq)
+            print(fa_seq)
+            # Adding reverse complements into the training process:
+            if idx <= int(pos_batch_size/2):
+                batch_X.append(fa_seq)
+            else:
+                batch_X.append(self.rev_comp(fa_seq))
+            idx += 1
             seq_len.append(len(fa_seq))
-
         # converting this data into onehot
         batch_X_onehot = AccessGenome.get_onehot_array(batch_X,
                                                        window_length=window_len,
@@ -186,7 +202,6 @@ class ConstructSets(AccessGenome):
         # print(positive_sample_w_shift)
         # print((np.array(lens)))
         positive_sample_w_shift.to_csv("out.pos.bed")
-
 
         # creating a BedTool object for further use:
         positive_sample_bdt_obj = BedTool.from_dataframe(positive_sample_w_shift)
