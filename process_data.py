@@ -23,7 +23,8 @@ from pybedtools import BedTool
 
 # local imports
 import utils
-import sys
+
+np.random.seed(1)
 
 
 class AccessGenome:
@@ -98,23 +99,13 @@ class AccessGenome:
 
         pos_batch_size = len(batch_y)
 
-        idx = 0
         for chrom, start, stop, y in coordinates_df.values:
             fa_seq = genome_fasta[chrom][int(start):int(stop)]
-            print(fa_seq)
-            nseq = ''.join(list(np.repeat('N', 500)))
-            if fa_seq is nseq:
-                print(fa_seq)
-                print(chrom)
-                print(start)
-                print(stop)
-                print(y)
             # Adding reverse complements into the training process:
             if idx <= int(pos_batch_size/2):
                 batch_X.append(fa_seq)
             else:
                 batch_X.append(self.rev_comp(fa_seq))
-            idx += 1
             seq_len.append(len(fa_seq))
         # converting this data into onehot
         batch_X_onehot = AccessGenome.get_onehot_array(batch_X,
@@ -224,6 +215,19 @@ class ConstructSets(AccessGenome):
         # print("Printing the Data and Length of negative co-ordinates")
         negative_sample.columns = ['chr', 'start', 'end']  # naming such that the
 
+        # get flanking regions in the negative set;
+        postive_set = self.chip_coords
+        flanks_left = self.chip_coords.copy()
+        flanks_right = self.chip_coords.copy()
+
+        flanks_left['start'] = self.chip_coords['start'] - 1250
+        flanks_left['end'] = self.chip_coords['end'] - 750
+        flanks_right['start'] = self.chip_coords['start'] + 750
+        flanks_right['end'] = self.chip_coords['end'] + 1250
+
+        flanking_windows = pd.concat([flanks_left, flanks_right])
+        print(flanking_windows)
+
         # get unbound accessible sites in the training chromosomes:
         acc_regions_bdt = BedTool(self.acc_regions_file)
         unbound_acc_bdt = acc_regions_bdt.intersect(self.curr_genome_bed.fn, v=True)
@@ -239,6 +243,13 @@ class ConstructSets(AccessGenome):
         negative_sample['label'] = 0
         negative_sample_acc['label'] = 0
 
+
+        print(positive_sample_w_shift)
+        print(negative_sample)
+        print(negative_sample_acc)
+        print(flanking_windows)
+
+        exit()
         # mixing and shuffling positive and negative set:
         training_coords = pd.concat([positive_sample_w_shift, negative_sample, negative_sample_acc])
         # positive: negative ratio = 1: 2
