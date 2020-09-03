@@ -188,7 +188,6 @@ class ConstructSets(AccessGenome):
 
         The unbound/negative set is chosen randomly from the genome.(ha)
         """
-        print('Entering batch selection...')
         # positive sample
         # Take a sample from the chip_coords file,
         # Then apply a random shift that returns 500 bp windows.
@@ -214,7 +213,6 @@ class ConstructSets(AccessGenome):
         unbound_flanks_df.columns = ['chr', 'start', 'end']
         unbound_flanks_df['label'] = 0
         unbound_flanks_df = unbound_flanks_df.sample(frac=1)
-        print(unbound_flanks_df)
         # negative sample: pre-accessible/accessible
         # get accessibility domains.
         # Use BedTools shuffle to place windows in these regions.
@@ -235,17 +233,13 @@ class ConstructSets(AccessGenome):
         denom = np.sum(self.ratios)
         split = [int((frac/denom) * self.batch_size) for frac in self.ratios]
         b_r, ub_rand, ub_acc, ub_flanks = split
-        print(b_r, ub_rand, ub_acc, ub_flanks)
-
         training_coords = pd.concat([bound_sample_w_shift[0: b_r],
                                      unbound_random_df[b_r: (b_r + ub_rand)],
                                      unbound_acc_df[(b_r + ub_rand): (b_r + ub_rand + ub_acc)],
                                      unbound_flanks_df[(b_r + ub_rand + ub_acc): self.batch_size]])
-        print(training_coords)
-        print(len(training_coords))
+
         # randomly shuffle the dataFrame
         training_coords = training_coords.sample(frac=1)
-        print(len(training_coords))
         return training_coords
 
     def get_data(self):
