@@ -240,9 +240,12 @@ class ConstructSets(AccessGenome):
         training_coords = pd.concat([bound_sample_w_shift[0: b_r],
                                      unbound_random_df[b_r: (b_r + ub_rand)],
                                      unbound_acc_df[(b_r + ub_rand): (b_r + ub_rand + ub_acc)],
-                                     unbound_flanks_df[(b_r + ub_rand + ub_acc): ]])
+                                     unbound_flanks_df[(b_r + ub_rand + ub_acc): self.batch_size]])
+        print(training_coords)
+        print(len(training_coords))
         # randomly shuffle the dataFrame
         training_coords = training_coords.sample(frac=1)
+        print(len(training_coords))
         return training_coords
 
     def get_data(self):
@@ -392,9 +395,9 @@ def data_generator(genome_sizes_file, peaks_file, genome_fasta_file,
     flanks_left['end'] = chip_seq_coordinates['start'] - 1050
     flanks_right['start'] = chip_seq_coordinates['start'] + 1050
     flanks_right['end'] = chip_seq_coordinates['start'] + 1550
-    flanks = pd.concat(flanks_left, flanks_right)
+    flanks = pd.concat([flanks_left, flanks_right])
     flanks_bdt_obj = BedTool.from_dataframe(flanks)
-    print(flanks_bdt_obj.head)
+    print(flanks_bdt_obj.head())
     flanks_bdt_obj = flanks_bdt_obj.intersect(BedTool.from_dataframe(chip_seq_coordinates),
                                               v=True)
     print(flanks_bdt_obj.head)
