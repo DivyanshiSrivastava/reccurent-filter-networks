@@ -235,6 +235,7 @@ class ConstructSets(AccessGenome):
         denom = np.sum(self.ratios)
         split = [int((frac/denom) * self.batch_size) for frac in self.ratios]
         b_r, ub_rand, ub_acc, ub_flanks = split
+        print(b_r, ub_rand, ub_acc, ub_flanks)
 
         training_coords = pd.concat([bound_sample_w_shift[0: b_r],
                                      unbound_random_df[b_r: (b_r + ub_rand)],
@@ -393,7 +394,10 @@ def data_generator(genome_sizes_file, peaks_file, genome_fasta_file,
     flanks_right['end'] = chip_seq_coordinates['start'] + 1550
     flanks = pd.concat(flanks_left, flanks_right)
     flanks_bdt_obj = BedTool.from_dataframe(flanks)
-    flanks_bdt_obj = flanks_bdt_obj.intersect(BedTool.from_dataframe(chip_seq_coordinates))
+    print(flanks_bdt_obj.head)
+    flanks_bdt_obj = flanks_bdt_obj.intersect(BedTool.from_dataframe(chip_seq_coordinates),
+                                              v=True)
+    print(flanks_bdt_obj.head)
 
     # loading the exclusion coords:
     chipseq_exclusion_windows, exclusion_windows_bdt = utils.exclusion_regions(blacklist_file,
