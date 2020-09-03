@@ -124,7 +124,7 @@ class ConstructSets(AccessGenome):
 
     def __init__(self, genome_sizes_file, genome_fasta_file, blacklist_file,
                  chip_coords, window_length, exclusion_btd_obj,
-                 curr_genome_bed, batch_size, acc_regions_file):
+                 curr_genome_bed, batch_size, acc_regions_file, flanks, ratios):
         super().__init__(genome_fasta_file)
         self.genome_sizes_file = genome_sizes_file
         self.blacklist_file = blacklist_file
@@ -134,6 +134,8 @@ class ConstructSets(AccessGenome):
         self.curr_genome_bed = curr_genome_bed
         self.batch_size = batch_size
         self.acc_regions_file = acc_regions_file
+        self.flanks_bdt = flanks  # This is BDT object
+        self.ratios = ratios  # list
 
     def apply_random_shift(self, coords):
         """
@@ -181,94 +183,63 @@ class ConstructSets(AccessGenome):
     def define_coordinates(self):
         """
         Use the chip-seq peak file and the blacklist files to define a bound
-        set and an unbound set of sites. The ratio of bound to unbound is 1:2,
+        set and an unbound set of sites. The ratio of bound to unbound is 1:N,
         but can be controlled using the parameter "ratio".
 
-        The unbound/negative set is chosen randomly from the genome.
+        The unbound/negative set is chosen randomly from the genome.(ha)
         """
-        # First taking 500 examples, and then subsetting subsequently.
-        positive_sample_size = int(self.batch_size)
-
-        # taking a sample from the chip_coords file,
-        # i.e. sub-setting 50 rows from self.chip_coords
-        positive_sample = self.chip_coords.sample(n=positive_sample_size)
-        # taking only the first three columns
-        # (removing multiGPS scores & caller names)
-        positive_sample = positive_sample.iloc[:, 0:3]
-        # applying a random shift that returns 200 bp windows.
-        positive_sample_w_shift = self.apply_random_shift(positive_sample)
-        lens = (positive_sample_w_shift['end'] - positive_sample_w_shift['start'])
-        # print("Printing the Data and Length of positive co-ordinates")
-        # print(positive_sample_w_shift)
-        # print((np.array(lens)))
-        positive_sample_w_shift.to_csv("out.pos.bed")
-
-        # creating a BedTool object for further use:
-        positive_sample_bdt_obj = BedTool.from_dataframe(positive_sample_w_shift)
-
-        # print(self.curr_genome_bed)
-        # negative samples/random
-        negative_sample_bdt_obj = BedTool.shuffle(positive_sample_bdt_obj,
-                                                  g=self.genome_sizes_file,
-                                                  incl=self.curr_genome_bed.fn,
-                                                  excl=self.exclusion_bdt_obj.fn)
-        negative_sample = negative_sample_bdt_obj.to_dataframe()
-        # print("Printing the Data and Length of negative co-ordinates")
-        negative_sample.columns = ['chr', 'start', 'end']  # naming such that the
-
-        # get flanking regions in the negative set;
-        flanks_left = self.chip_coords.copy()
-        flanks_right = self.chip_coords.copy()
-        flanks_left['start'] = self.chip_coords['start'] - 1550
-        flanks_left['end'] = self.chip_coords['end'] - 1050
-        flanks_right['start'] = self.chip_coords['start'] + 1050
-        flanks_right['end'] = self.chip_coords['end'] + 1550
-        print("Len of chip_coords")
-        print(len(self.chip_coords))
-        print(len(flanks_right))
-        print(len(flanks_left))
-
-        flanking_windows = pd.concat([flanks_left, flanks_right])
-        print(len(flanking_windows))
-
-        # get flanking windows in training chromosomes only:
-        flanks_bdt = BedTool(flanking_windows)
-        flanks_training = flanks_bdt.intersect(self.curr_genome_bed.fn)
-        flanks_df = flanks_training.to_dataframe()
-
-        # get unbound accessible sites in the training chromosomes:
-        acc_regions_bdt = BedTool(self.acc_regions_file)
-        unbound_acc_bdt = acc_regions_bdt.intersect(self.curr_genome_bed.fn)
+        print('Entering batch selection...')
+        # positive sample
+        # Take a sample from the chip_coords file,
+        # Then apply a random shift that returns 500 bp windows.
+        # Create a BedTool object for further use.
+        bound_sample_size = int(self.batch_size)
+        bound_sample = self.chip_coords.sample(n=bound_sample_size)
+        bound_sample_w_shift = self.apply_random_shift(bound_sample)
+        bound_sample_bdt_obj = BedTool.from_dataframe(bound_sample_w_shift)
+        bound_sample_w_shift['label'] = 1
+        # negative samples: random
+        # note: the self.curr_genome_bed.fn contains only training chromosomes.
+        # Creates a DF.
+        unbound_random_bdt_obj = BedTool.shuffle(bound_sample_bdt_obj,
+                                                 g=self.genome_sizes_file,
+                                                 incl=self.curr_genome_bed.fn,
+                                                 excl=self.exclusion_bdt_obj.fn)
+        unbound_random_df = unbound_random_bdt_obj.to_dataframe()
+        unbound_random_df.columns = ['chr', 'start', 'end']
+        unbound_random_df['label'] = 0
+        # negative sample: flanking windows
+        unbound_flanks_bdt_obj = self.flanks_bdt.intersect(self.curr_genome_bed.fn)
+        unbound_flanks_df = unbound_flanks_bdt_obj.to_dataframe()
+        unbound_flanks_df.columns = ['chr', 'start', 'end']
+        unbound_flanks_df['label'] = 0
+        unbound_flanks_df = unbound_flanks_df.sample(frac=1)
+        print(unbound_flanks_df)
+        # negative sample: pre-accessible/accessible
+        # get accessibility domains.
+        # Use BedTools shuffle to place windows in these regions.
+        regions_acc_bdt_obj = BedTool(self.acc_regions_file)
+        regions_acc_bdt_obj = regions_acc_bdt_obj.intersect(self.curr_genome_bed.fn)
         # negative samples/pre-accessible
-        negative_sample_bdt_obj_acc = BedTool.shuffle(positive_sample_bdt_obj,
-                                                      g=self.genome_sizes_file,
-                                                      incl=unbound_acc_bdt.fn,
-                                                      excl=self.exclusion_bdt_obj.fn)
-        negative_sample_acc = negative_sample_bdt_obj_acc.to_dataframe()
-        negative_sample_acc.columns = ['chr', 'start', 'end']
-        # adding in labels:
-        positive_sample_w_shift['label'] = 1
-        negative_sample['label'] = 0
-        negative_sample_acc['label'] = 0
-        flanking_windows['label'] = 0
-        print("In training regime")
-        print("pos_sample_wuhuu")
-        print(positive_sample_w_shift)
-        print("neg_sample_random")
-        print(negative_sample)
-        print("neg_sample_acc")
-        print(negative_sample_acc)
-        print("neg_sample_flanks")
-        print(flanks_df)
+        unbound_acc_bdt_obj = BedTool.shuffle(bound_sample_bdt_obj,
+                                              g=self.genome_sizes_file,
+                                              incl=regions_acc_bdt_obj.fn,
+                                              excl=self.exclusion_bdt_obj.fn)
+        unbound_acc_df = unbound_acc_bdt_obj.to_dataframe()
+        unbound_acc_df.columns = ['chr', 'start', 'end']
+        unbound_acc_df['label'] = 0
 
-        exit()
-        # mixing and shuffling positive and negative set:
-        training_coords = pd.concat([positive_sample_w_shift, negative_sample,
-                                     negative_sample_acc, flanks_df])
-        # positive: negative ratio = 1: 2
-        training_coords = pd.concat([positive_sample_w_shift[:int(self.batch_size/3)],
-                                     flanks_df[int(self.batch_size/3):(2 * int(self.batch_size/3))],
-                                     negative_sample_acc[(2 * int(self.batch_size/3)):]])
+        # Training set based on the training ratios:
+        ratios = self.ratios  # tuple or list
+        # example: (1, 2, 4, 1)
+        denom = np.sum(self.ratios)
+        split = [int((frac/denom) * self.batch_size) for frac in self.ratios]
+        b_r, ub_rand, ub_acc, ub_flanks = split
+
+        training_coords = pd.concat([bound_sample_w_shift[0: b_r],
+                                     unbound_random_df[b_r: (b_r + ub_rand)],
+                                     unbound_acc_df[(b_r + ub_rand): (b_r + ub_rand + ub_acc)],
+                                     unbound_flanks_df[(b_r + ub_rand + ub_acc): ]])
         # randomly shuffle the dataFrame
         training_coords = training_coords.sample(frac=1)
         return training_coords
@@ -413,10 +384,21 @@ def data_generator(genome_sizes_file, peaks_file, genome_fasta_file,
                                                    to_keep=to_keep,
                                                    to_filter=to_filter)
 
+    # getting a list of chip-seq flanking windows: (can be a separate fn in utils)
+    flanks_left = chip_seq_coordinates.copy()
+    flanks_right = chip_seq_coordinates.copy()
+    flanks_left['start'] = chip_seq_coordinates['start'] - 1550
+    flanks_left['end'] = chip_seq_coordinates['start'] - 1050
+    flanks_right['start'] = chip_seq_coordinates['start'] + 1050
+    flanks_right['end'] = chip_seq_coordinates['start'] + 1550
+    flanks = pd.concat(flanks_left, flanks_right)
+    flanks_bdt_obj = BedTool.from_dataframe(flanks)
+    flanks_bdt_obj = flanks_bdt_obj.intersect(BedTool.from_dataframe(chip_seq_coordinates))
 
     # loading the exclusion coords:
     chipseq_exclusion_windows, exclusion_windows_bdt = utils.exclusion_regions(blacklist_file,
                                                                                chip_seq_coordinates)
+    ratios = [2, 1, 1, 1]
     # constructing the training set
     construct_sets = ConstructSets(genome_sizes_file=genome_sizes_file,
                                    genome_fasta_file=genome_fasta_file,
@@ -426,7 +408,9 @@ def data_generator(genome_sizes_file, peaks_file, genome_fasta_file,
                                    window_length=window_lenght,
                                    curr_genome_bed=genome_bed_val,
                                    batch_size=batch_size,
-                                   acc_regions_file=acc_regions_file)
+                                   acc_regions_file=acc_regions_file,
+                                   flanks=flanks_bdt_obj,
+                                   ratios=ratios)
     while True:
         X, y, coords = construct_sets.get_data()
         yield X, y
