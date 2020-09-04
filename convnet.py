@@ -81,18 +81,22 @@ class ConvNet:
         return model
 
     def fit_the_data(self, model_cnn, train_gen, val_data, patience,
-                     steps_per_epoch):
+                     steps_per_epoch, opt, learning_rate):
         # fit the data
-        adam = Adam(learning_rate=0.001)
-        # sgd = SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
+        adam = Adam(learning_rate=learning_rate)
+        sgd = SGD(lr=learning_rate, decay=0.001, momentum=0.9, nesterov=True)
+        if opt == 'adam':
+            optimizer = adam
+        else:
+            optimizer = sgd
         model_cnn.compile(loss='binary_crossentropy',
-                          optimizer=adam, metrics=['accuracy'])
+                          optimizer=optimizer, metrics=['accuracy'])
         precision_recall_history = PrecisionRecall(val_data=val_data)
         earlystop = EarlyStopping(monitor='val_loss', mode='min',
                                   verbose=1, min_delta=0.01, patience=patience)
         model_cnn.fit(train_gen,
                       steps_per_epoch=steps_per_epoch,
-                      epochs=100,
+                      epochs=50,
                       validation_data=val_data,
                       callbacks=[earlystop, precision_recall_history])
         print(precision_recall_history.val_auprc)
@@ -119,7 +123,7 @@ class ConvNet:
 
 
 def train_model(genome_size, fa, peaks, blacklist, results_dir, batch_size,
-                steps, patience, acc_regions_file):
+                steps, patience, acc_regions_file, learning_rate, opt):
 
     print(steps)
 
@@ -144,7 +148,9 @@ def train_model(genome_size, fa, peaks, blacklist, results_dir, batch_size,
                                              train_gen=train_generator,
                                              val_data=(x_val, y_val),
                                              patience=patience,
-                                             steps_per_epoch=steps)
+                                             steps_per_epoch=steps,
+                                             learning_rate=learning_rate,
+                                             opt=opt)
     print('evaluating the model')
     architecture.evaluate_and_save_model(model=fitted_model,
                                          test_data_tuple=test_data,
