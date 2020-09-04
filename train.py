@@ -32,4 +32,4 @@ if __name__ == "__main__":
                         results_dir=args.results_dir, batch_size=batch_size,
                         steps=steps_per_epoch, patience=patience,
                         acc_regions_file=args.acc_regions_file,
-                        learning_rate=lr, opt=optimizer)
+                        learning_rate=lr, opt=optimizer, ratios=ratio)

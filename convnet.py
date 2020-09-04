@@ -123,7 +123,7 @@ class ConvNet:
 
 
 def train_model(genome_size, fa, peaks, blacklist, results_dir, batch_size,
-                steps, patience, acc_regions_file, learning_rate, opt):
+                steps, patience, acc_regions_file, learning_rate, opt, ratios):
 
     print(steps)
 
@@ -134,7 +134,8 @@ def train_model(genome_size, fa, peaks, blacklist, results_dir, batch_size,
                                                   peaks=peaks,
                                                   blacklist=blacklist,
                                                   batch_size=batch_size,
-                                                  acc_regions_file=acc_regions_file)
+                                                  acc_regions_file=acc_regions_file,
+                                                  ratios=ratios)
 
     print('building convolutional architecture')
     architecture = ConvNet(window_len=500, n_filters=128, filter_size=20,
