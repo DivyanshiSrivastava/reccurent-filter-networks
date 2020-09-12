@@ -19,6 +19,7 @@ from tensorflow.keras.layers import Dense, Dropout, Activation, Flatten, Input
 from tensorflow.keras.layers import Conv1D, MaxPooling1D, LSTM, Reshape
 from tensorflow.keras.optimizers import SGD, Adam
 from tensorflow.keras.callbacks import Callback
+from tensorflow.keras import optimizers
 
 
 import get_data
@@ -83,7 +84,10 @@ class ConvNet:
     def fit_the_data(self, model_cnn, train_gen, val_data, patience,
                      steps_per_epoch, opt, learning_rate):
         # fit the data
-        adam = Adam(learning_rate=learning_rate)
+        lr_schedule = optimizers.schedules.ExponentialDecay(
+            initial_learning_rate=learning_rate, decay_steps=steps_per_epoch * 2,
+            decay_rate=0.96, staircase=False, name=None)        #
+        adam = Adam(learning_rate=lr_schedule)
         sgd = SGD(lr=learning_rate, decay=0.001, momentum=0.9, nesterov=True)
         if opt == 'adam':
             optimizer = adam
@@ -93,7 +97,7 @@ class ConvNet:
                           optimizer=optimizer, metrics=['accuracy'])
         precision_recall_history = PrecisionRecall(val_data=val_data)
         earlystop = EarlyStopping(monitor='val_loss', mode='min',
-                                  verbose=1, min_delta=0.01, patience=patience)
+                                  verbose=1, min_delta=0.001, patience=patience)
         model_cnn.fit(train_gen,
                       steps_per_epoch=steps_per_epoch,
                       epochs=50,
