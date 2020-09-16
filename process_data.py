@@ -167,8 +167,8 @@ class ConstructSets(AccessGenome):
             shifted_coords(pandas dataFrame): The output bedfile with shifted coords
         """
         # defining the random shift
-        low = int(-self.L/2 + 50)
-        high = int(self.L/2 - 50)
+        low = int(-self.L/2 + 25)
+        high = int(self.L/2 - 25)
         coords['random_shift'] = np.random.randint(low=low, high=high,
                                                    size=len(coords))
 
@@ -383,19 +383,25 @@ def data_generator(genome_sizes_file, peaks_file, genome_fasta_file,
                                                    to_keep=to_keep,
                                                    to_filter=to_filter)
 
-    # getting a list of chip-seq flanking windows: (can be a separate fn in utils)
-    flanks_left = chip_seq_coordinates.copy()
-    flanks_right = chip_seq_coordinates.copy()
-    flanks_left['start'] = chip_seq_coordinates['start'] - 1550
-    flanks_left['end'] = chip_seq_coordinates['start'] - 1050
-    flanks_right['start'] = chip_seq_coordinates['start'] + 1050
-    flanks_right['end'] = chip_seq_coordinates['start'] + 1550
-    flanks = pd.concat([flanks_left, flanks_right])
+    def make_flanks(lower_lim, upper_lim):
+        # getting a list of chip-seq flanking windows:
+        # (can be a separate fn in utils)
+        flanks_left = chip_seq_coordinates.copy()
+        flanks_right = chip_seq_coordinates.copy()
+        flanks_left['start'] = chip_seq_coordinates['start'] - upper_lim
+        flanks_left['end'] = chip_seq_coordinates['start'] - lower_lim
+        flanks_right['start'] = chip_seq_coordinates['start'] + lower_lim
+        flanks_right['end'] = chip_seq_coordinates['start'] + upper_lim
+        return flanks_left, flanks_right
+
+    fl_r, fl_l = make_flanks(lower_lim=250, upper_lim=750)
+    fl_r_2, fl_l_2 = make_flanks(lower_lim=200, upper_lim=700)
+    flanks = pd.concat([fl_r, fl_l, fl_r_2, fl_l_2])
     flanks_bdt_obj = BedTool.from_dataframe(flanks)
-    print(flanks_bdt_obj.head())
-    flanks_bdt_obj = flanks_bdt_obj.intersect(BedTool.from_dataframe(chip_seq_coordinates),
-                                              v=True)
-    print(flanks_bdt_obj.head)
+    # print(flanks_bdt_obj.head())
+    # flanks_bdt_obj = flanks_bdt_obj.intersect(BedTool.from_dataframe(chip_seq_coordinates),
+    #                                           v=True)
+    # print(flanks_bdt_obj.head)
 
     # loading the exclusion coords:
     chipseq_exclusion_windows, exclusion_windows_bdt = utils.exclusion_regions(blacklist_file,
