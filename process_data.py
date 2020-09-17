@@ -219,24 +219,23 @@ class ConstructSets(AccessGenome):
         regions_acc_bdt_obj = BedTool(self.acc_regions_file)
         regions_acc_bdt_obj = regions_acc_bdt_obj.intersect(self.curr_genome_bed.fn)
         # negative samples/pre-accessible
-        unbound_acc_bdt_obj = BedTool.shuffle(bound_sample_bdt_obj,
-                                              g=self.genome_sizes_file,
-                                              incl=regions_acc_bdt_obj.fn,
-                                              excl=self.exclusion_bdt_obj.fn)
-        unbound_acc_df = unbound_acc_bdt_obj.to_dataframe()
-        unbound_acc_df.columns = ['chr', 'start', 'end']
-        unbound_acc_df['label'] = 0
+        # unbound_acc_bdt_obj = BedTool.shuffle(bound_sample_bdt_obj,
+        #                                       g=self.genome_sizes_file,
+        #                                       incl=regions_acc_bdt_obj.fn,
+        #                                       excl=self.exclusion_bdt_obj.fn)
+        # unbound_acc_df = unbound_acc_bdt_obj.to_dataframe()
+        # unbound_acc_df.columns = ['chr', 'start', 'end']
+        # unbound_acc_df['label'] = 0
 
         # Training set based on the training ratios:
         ratios = self.ratios  # tuple or list
         # example: (1, 2, 4, 1)
         denom = np.sum(self.ratios)
         split = [int((frac/denom) * self.batch_size) for frac in self.ratios]
-        b_r, ub_rand, ub_acc, ub_flanks = split
+        b_r, ub_rand, ub_flanks = split
         training_coords = pd.concat([bound_sample_w_shift[0: b_r],
                                      unbound_random_df[b_r: (b_r + ub_rand)],
-                                     unbound_acc_df[(b_r + ub_rand): (b_r + ub_rand + ub_acc)],
-                                     unbound_flanks_df[(b_r + ub_rand + ub_acc): self.batch_size]])
+                                     unbound_flanks_df[(b_r + ub_rand): self.batch_size]])
 
         # randomly shuffle the dataFrame
         training_coords = training_coords.sample(frac=1)
@@ -396,7 +395,9 @@ def data_generator(genome_sizes_file, peaks_file, genome_fasta_file,
 
     fl_r, fl_l = make_flanks(lower_lim=250, upper_lim=750)
     fl_r_2, fl_l_2 = make_flanks(lower_lim=200, upper_lim=700)
-    flanks = pd.concat([fl_r, fl_l, fl_r_2, fl_l_2])
+    fl_r_3, fl_l_3 = make_flanks(lower_lim=1500, upper_lim=2000)
+    fl_r_4, fl_l_4 = make_flanks(lower_lim=1000, upper_lim=1500)
+    flanks = pd.concat([fl_r, fl_l, fl_r_2, fl_l_2, fl_l_3, fl_r_3, fl_r_4, fl_l_4])
     flanks_bdt_obj = BedTool.from_dataframe(flanks)
     # print(flanks_bdt_obj.head())
     # flanks_bdt_obj = flanks_bdt_obj.intersect(BedTool.from_dataframe(chip_seq_coordinates),
