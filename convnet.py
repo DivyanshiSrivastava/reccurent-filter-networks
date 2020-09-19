@@ -7,6 +7,7 @@ Note: The code structure should remain similar for the RNF architectures.
 """
 
 import subprocess
+import pybedtools
 
 # sk-learn imports
 from sklearn.metrics import roc_auc_score
@@ -48,6 +49,10 @@ class PrecisionRecall(Callback):
         au_prc = average_precision_score(y_val, predictions)
         print("\nau-PRC:", au_prc)
         self.val_auprc.append(au_prc)
+        # Tmp bedfiles taking up huge amount of disk space.
+        # Cleaning up after every epoch. May separate fn. for this.
+        pybedtools.cleanup(verbose=1)
+
 
 
 class ConvNet:

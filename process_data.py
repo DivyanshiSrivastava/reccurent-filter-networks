@@ -19,12 +19,14 @@ What data does this script take as input or require?
 import numpy as np
 import pandas as pd
 import pyfasta
+import pybedtools
 from pybedtools import BedTool
 
 # local imports
 import utils
 
-np.random.seed(1)
+pybedtools.set_tempdir('/scratch')
+np.random.seed(9)
 
 
 class AccessGenome:
@@ -123,18 +125,19 @@ class ConstructSets(AccessGenome):
     """
 
     def __init__(self, genome_sizes_file, genome_fasta_file, blacklist_file,
-                 chip_coords, window_length, exclusion_btd_obj,
+                 chip_coords, window_length, exclusion_df,
                  curr_genome_bed, batch_size, acc_regions_file, flanks, ratios):
         super().__init__(genome_fasta_file)
         self.genome_sizes_file = genome_sizes_file
         self.blacklist_file = blacklist_file
         self.chip_coords = chip_coords
         self.L = window_length
-        self.exclusion_bdt_obj = exclusion_btd_obj
-        self.curr_genome_bed = curr_genome_bed
+        self.exclusion_df = exclusion_df  # This is df, convert to a bdt object.
+        self.curr_genome_bed = BedTool.from_dataframe(curr_genome_bed)
+        # self.curr_genome_bed is is a df, converting to a bdt obj.
         self.batch_size = batch_size
         self.acc_regions_file = acc_regions_file
-        self.flanks_bdt = flanks  # This is BDT object
+        self.flanks_df = flanks  # This is df, convert to a bdt object.
         self.ratios = ratios  # list
 
     def apply_random_shift(self, coords):
@@ -200,15 +203,17 @@ class ConstructSets(AccessGenome):
         # negative samples: random
         # note: the self.curr_genome_bed.fn contains only training chromosomes.
         # Creates a DF.
+        exclusion_bdt_obj = BedTool.from_dataframe(self.exclusion_df)
         unbound_random_bdt_obj = BedTool.shuffle(bound_sample_bdt_obj,
                                                  g=self.genome_sizes_file,
                                                  incl=self.curr_genome_bed.fn,
-                                                 excl=self.exclusion_bdt_obj.fn)
+                                                 excl=exclusion_bdt_obj.fn)
         unbound_random_df = unbound_random_bdt_obj.to_dataframe()
         unbound_random_df.columns = ['chr', 'start', 'end']
         unbound_random_df['label'] = 0
         # negative sample: flanking windows
-        unbound_flanks_bdt_obj = self.flanks_bdt.intersect(self.curr_genome_bed.fn)
+        flanks_bdt = BedTool.from_dataframe(self.flanks_df)
+        unbound_flanks_bdt_obj = flanks_bdt.intersect(self.curr_genome_bed.fn)
         unbound_flanks_df = unbound_flanks_bdt_obj.to_dataframe()
         unbound_flanks_df.columns = ['chr', 'start', 'end']
         unbound_flanks_df['label'] = 0
@@ -216,8 +221,8 @@ class ConstructSets(AccessGenome):
         # negative sample: pre-accessible/accessible
         # get accessibility domains.
         # Use BedTools shuffle to place windows in these regions.
-        regions_acc_bdt_obj = BedTool(self.acc_regions_file)
-        regions_acc_bdt_obj = regions_acc_bdt_obj.intersect(self.curr_genome_bed.fn)
+        # regions_acc_bdt_obj = BedTool(self.acc_regions_file)
+        # regions_acc_bdt_obj = regions_acc_bdt_obj.intersect(self.curr_genome_bed.fn)
         # negative samples/pre-accessible
         # unbound_acc_bdt_obj = BedTool.shuffle(bound_sample_bdt_obj,
         #                                       g=self.genome_sizes_file,
@@ -376,6 +381,7 @@ def data_generator(genome_sizes_file, peaks_file, genome_fasta_file,
     # load the genome_sizes_file:
     genome_bed_val = utils.get_genome_sizes(genome_sizes_file, to_keep=to_keep,
                                             to_filter=to_filter)
+    genome_bed_df = genome_bed_val.to_dataframe()
     # loading the chip-seq bed file
     chip_seq_coordinates = utils.load_chipseq_data(peaks_file,
                                                    genome_sizes_file=genome_sizes_file,
@@ -398,7 +404,9 @@ def data_generator(genome_sizes_file, peaks_file, genome_fasta_file,
     fl_r_3, fl_l_3 = make_flanks(lower_lim=1500, upper_lim=2000)
     fl_r_4, fl_l_4 = make_flanks(lower_lim=1000, upper_lim=1500)
     flanks = pd.concat([fl_r, fl_l, fl_r_2, fl_l_2, fl_l_3, fl_r_3, fl_r_4, fl_l_4])
-    flanks_bdt_obj = BedTool.from_dataframe(flanks)
+    # flanks_bdt_obj = BedTool.from_dataframe(flanks)
+    # converting the df to a bedtools object inside the generator, to enable a
+    # py-bedtools cleanup otherwise.
     # print(flanks_bdt_obj.head())
     # flanks_bdt_obj = flanks_bdt_obj.intersect(BedTool.from_dataframe(chip_seq_coordinates),
     #                                           v=True)
@@ -407,17 +415,18 @@ def data_generator(genome_sizes_file, peaks_file, genome_fasta_file,
     # loading the exclusion coords:
     chipseq_exclusion_windows, exclusion_windows_bdt = utils.exclusion_regions(blacklist_file,
                                                                                chip_seq_coordinates)
+    exclusion_windows_df = exclusion_windows_bdt.to_dataframe()
     # constructing the training set
     construct_sets = ConstructSets(genome_sizes_file=genome_sizes_file,
                                    genome_fasta_file=genome_fasta_file,
                                    blacklist_file=blacklist_file,
                                    chip_coords=chip_seq_coordinates,
-                                   exclusion_btd_obj=exclusion_windows_bdt,
+                                   exclusion_df=exclusion_windows_df,
                                    window_length=window_lenght,
-                                   curr_genome_bed=genome_bed_val,
+                                   curr_genome_bed=genome_bed_df,
                                    batch_size=batch_size,
                                    acc_regions_file=acc_regions_file,
-                                   flanks=flanks_bdt_obj,
+                                   flanks=flanks,
                                    ratios=ratios)
     while True:
         X, y, coords = construct_sets.get_data()
