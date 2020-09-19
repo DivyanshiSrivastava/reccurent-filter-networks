@@ -133,8 +133,8 @@ class ConstructSets(AccessGenome):
         self.chip_coords = chip_coords
         self.L = window_length
         self.exclusion_df = exclusion_df  # This is df, convert to a bdt object.
-        self.curr_genome_bed = BedTool.from_dataframe(curr_genome_bed)
-        # self.curr_genome_bed is is a df, converting to a bdt obj.
+        self.curr_genome_bed = curr_genome_bed
+        # self.curr_genome_bed is is a df, convert to a bdt obj.
         self.batch_size = batch_size
         self.acc_regions_file = acc_regions_file
         self.flanks_df = flanks  # This is df, convert to a bdt object.
@@ -203,17 +203,18 @@ class ConstructSets(AccessGenome):
         # negative samples: random
         # note: the self.curr_genome_bed.fn contains only training chromosomes.
         # Creates a DF.
+        curr_genome_bdt = BedTool.from_dataframe(self.curr_genome_bed)
         exclusion_bdt_obj = BedTool.from_dataframe(self.exclusion_df)
         unbound_random_bdt_obj = BedTool.shuffle(bound_sample_bdt_obj,
                                                  g=self.genome_sizes_file,
-                                                 incl=self.curr_genome_bed.fn,
+                                                 incl=curr_genome_bdt.fn,
                                                  excl=exclusion_bdt_obj.fn)
         unbound_random_df = unbound_random_bdt_obj.to_dataframe()
         unbound_random_df.columns = ['chr', 'start', 'end']
         unbound_random_df['label'] = 0
         # negative sample: flanking windows
         flanks_bdt = BedTool.from_dataframe(self.flanks_df)
-        unbound_flanks_bdt_obj = flanks_bdt.intersect(self.curr_genome_bed.fn)
+        unbound_flanks_bdt_obj = flanks_bdt.intersect(curr_genome_bdt)
         unbound_flanks_df = unbound_flanks_bdt_obj.to_dataframe()
         unbound_flanks_df.columns = ['chr', 'start', 'end']
         unbound_flanks_df['label'] = 0
