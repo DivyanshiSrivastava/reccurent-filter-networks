@@ -13,8 +13,9 @@ from sklearn.metrics import roc_auc_score
 from sklearn.metrics import average_precision_score
 
 # keras imports
+import tensorflow as tf
 from tensorflow.keras.callbacks import EarlyStopping
-from tensorflow.keras.models import Model
+from tensorflow.keras.models import Model, load_model
 from tensorflow.keras.layers import Dense, Dropout, Activation, Flatten, Input
 from tensorflow.keras.layers import Conv1D, MaxPooling1D, LSTM, Reshape
 from tensorflow.keras.optimizers import SGD, Adam
@@ -82,7 +83,7 @@ class ConvNet:
         return model
 
     def fit_the_data(self, model_cnn, train_gen, val_data, patience,
-                     steps_per_epoch, opt, learning_rate):
+                     steps_per_epoch, opt, learning_rate, results_dir):
         # fit the data
         lr_schedule = optimizers.schedules.ExponentialDecay(
             initial_learning_rate=learning_rate, decay_steps=steps_per_epoch * 2,
@@ -93,20 +94,30 @@ class ConvNet:
             optimizer = adam
         else:
             optimizer = sgd
+
+        auprc = tf.keras.metrics.AUC(curve='PR')
         model_cnn.compile(loss='binary_crossentropy',
-                          optimizer=optimizer, metrics=['accuracy'])
+                          optimizer=optimizer, metrics=['accuracy', auprc])
         precision_recall_history = PrecisionRecall(val_data=val_data)
         earlystop = EarlyStopping(monitor='val_loss', mode='min',
                                   verbose=1, min_delta=0.001, patience=patience)
+        # save the best performing model
+        model_path_best = results_dir + '/model.best.hdf5'
+        checkpoint_models = tf.keras.callbacks.ModelCheckpoint(filepath=model_path_best,
+                                                               monitor='val_auprc',
+                                                               save_best_only=True)
         model_cnn.fit(train_gen,
                       steps_per_epoch=steps_per_epoch,
                       epochs=50,
                       validation_data=val_data,
-                      callbacks=[earlystop, precision_recall_history])
+                      callbacks=[earlystop, precision_recall_history, checkpoint_models])
         print(precision_recall_history.val_auprc)
-        return model_cnn
+        # also return the best model
+        best_model_pr = load_model(model_path_best)
+        return model_cnn, best_model_pr
 
-    def evaluate_and_save_model(self, model, test_data_tuple, results_dir):
+    def evaluate_and_save_model(self, model, test_data_tuple, results_dir,
+                                outname):
         # note this tuple is built in process_data.py
         x_test, y_test, bed_coords_test = test_data_tuple
         model_probas = model.predict(x_test)
@@ -114,7 +125,7 @@ class ConvNet:
         auprc = average_precision_score(y_test, model_probas)
 
         subprocess.call(['mkdir', results_dir])
-        records_file = results_dir + '/metrics.txt'
+        records_file = results_dir + '/' + outname + '.metrics.txt'
 
         with open(records_file, "w") as rf:
             # save metrics to results file in the outdir:
@@ -122,7 +133,7 @@ class ConvNet:
             rf.write("AUC ROC:{0}\n".format(auroc))
             rf.write("AUC PRC:{0}\n".format(auprc))
 
-        model.save(results_dir + '/model.hdf5')
+        model.save(results_dir + '/' + outname + '.hdf5')
         return auroc, auprc
 
 
@@ -149,17 +160,21 @@ def train_model(genome_size, fa, peaks, blacklist, results_dir, batch_size,
     print('fitting the model')
     # parsing the validation data tuple. (same as that returned be test data)
     x_val, y_val, bed_coords_val = val_data
-    fitted_model = architecture.fit_the_data(model_cnn=model,
+    fitted_model, best_model = architecture.fit_the_data(model_cnn=model,
                                              train_gen=train_generator,
                                              val_data=(x_val, y_val),
                                              patience=patience,
                                              steps_per_epoch=steps,
                                              learning_rate=learning_rate,
-                                             opt=opt)
+                                             opt=opt,
+                                             results_dir=results_dir)
     print('evaluating the model')
     architecture.evaluate_and_save_model(model=fitted_model,
                                          test_data_tuple=test_data,
-                                         results_dir=results_dir)
+                                         results_dir=results_dir, outname='model')
+    architecture.evaluate_and_save_model(model=best_model,
+                                         test_data_tuple=test_data,
+                                         results_dir=results_dir, outname='model_top')
 
 
 
