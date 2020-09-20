@@ -25,7 +25,7 @@ from pybedtools import BedTool
 # local imports
 import utils
 
-pybedtools.set_tempdir('/scratch')
+pybedtools.set_tempdir('/storage/home/dvs5680/scratch/')
 np.random.seed(9)
 
 

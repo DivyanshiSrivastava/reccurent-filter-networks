@@ -50,9 +50,10 @@ class PrecisionRecall(Callback):
         print("\nau-PRC:", au_prc)
         self.val_auprc.append(au_prc)
         # Tmp bedfiles taking up huge amount of disk space.
-        # Cleaning up after every epoch. May separate fn. for this.
-        pybedtools.cleanup(verbose=1)
-
+        # Cleaning up after every 10 epochs.
+        print(epoch)
+        if epoch % 5 == 0:
+            pybedtools.cleanup(verbose=0)
 
 
 class ConvNet:
@@ -146,7 +147,7 @@ def train_model(genome_size, fa, peaks, blacklist, results_dir, batch_size,
                 steps, patience, acc_regions_file, learning_rate, opt, ratios):
 
     print(steps)
-
+    subprocess.call(['mkdir', results_dir])
     print('getting the generators & test dataset')
     train_generator, val_data, test_data = \
             get_data.get_train_and_val_generators(genome_sizes=genome_size,
