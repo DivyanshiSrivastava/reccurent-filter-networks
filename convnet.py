@@ -23,7 +23,6 @@ from tensorflow.keras.optimizers import SGD, Adam
 from tensorflow.keras.callbacks import Callback
 from tensorflow.keras import optimizers
 
-
 import get_data
 
 
@@ -52,7 +51,7 @@ class PrecisionRecall(Callback):
         # Tmp bedfiles taking up huge amount of disk space.
         # Cleaning up after every 10 epochs.
         print(epoch)
-        if epoch % 5 == 0:
+        if (epoch+1) % 5 == 0:
             pybedtools.cleanup(verbose=0)
 
 

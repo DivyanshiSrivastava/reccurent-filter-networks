@@ -1,6 +1,13 @@
+"""
+Train models that predict TF binding using either CNNs or
+kernels with recurrent filters.
+Author: Divyanshi Srivastava (dvs5680@psu.edu)
+The Pennsylvania State University
+"""
 import argparse
 import convnet
 import yaml
+import rf_net
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Test the processing pipeline')
@@ -11,6 +18,7 @@ if __name__ == "__main__":
     parser.add_argument('results_dir', help='Directory for storing results')
     parser.add_argument('--params_yaml', help='Hyper-parameters_yaml_file')
     parser.add_argument('--acc_regions_file', help='BED file:accessible regions')
+    parser.add_argument('--network_type', help='Either CNN or RFN')
 
     args = parser.parse_args()
 
@@ -27,9 +35,17 @@ if __name__ == "__main__":
     optimizer = params['parameters']['optimizer']
     steps_per_epoch = params['parameters']['steps']
 
-    convnet.train_model(genome_size=args.genome_sizes, peaks=args.peaks,
-                        blacklist=args.blacklist, fa=args.fa,
-                        results_dir=args.results_dir, batch_size=batch_size,
-                        steps=steps_per_epoch, patience=patience,
-                        acc_regions_file=args.acc_regions_file,
-                        learning_rate=lr, opt=optimizer, ratios=ratio)
+    if args.network_type == 'CNN':
+        convnet.train_model(genome_size=args.genome_sizes, peaks=args.peaks,
+                            blacklist=args.blacklist, fa=args.fa,
+                            results_dir=args.results_dir, batch_size=batch_size,
+                            steps=steps_per_epoch, patience=patience,
+                            acc_regions_file=args.acc_regions_file,
+                            learning_rate=lr, opt=optimizer, ratios=ratio)
+    else:
+        rf_net.train_model(genome_size=args.genome_sizes, peaks=args.peaks,
+                           blacklist=args.blacklist, fa=args.fa,
+                           results_dir=args.results_dir, batch_size=batch_size,
+                           steps=steps_per_epoch, patience=patience,
+                           acc_regions_file=args.acc_regions_file,
+                           learning_rate=lr, opt=optimizer, ratios=ratio)
