@@ -109,7 +109,7 @@ class ConvNet:
         # save the best performing model
         model_path_best = results_dir + '/model.best.hdf5'
         checkpoint_models = tf.keras.callbacks.ModelCheckpoint(filepath=model_path_best,
-                                                               monitor='val_auprc',
+                                                               monitor='val_auc',
                                                                save_best_only=True)
         model_cnn.fit(train_gen,
                       steps_per_epoch=steps_per_epoch,
