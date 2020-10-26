@@ -37,17 +37,24 @@ if __name__ == "__main__":
     optimizer = params['parameters']['optimizer']
     steps_per_epoch = params['parameters']['steps']
 
+    filter_width = params['parameters']['filter_width']
+    no_of_filters = params['parameters']['no_of_filters']
+
     if args.network_type == 'CNN':
         convnet.train_model(genome_size=args.genome_sizes, peaks=args.peaks,
                             blacklist=args.blacklist, fa=args.fa,
                             results_dir=args.results_dir, batch_size=batch_size,
                             steps=steps_per_epoch, patience=patience,
                             acc_regions_file=args.acc_regions_file,
-                            learning_rate=lr, opt=optimizer, ratios=ratio)
+                            learning_rate=lr, opt=optimizer, ratios=ratio,
+                            filter_width=filter_width,
+                            no_of_filters=no_of_filters)
     else:
         rf_net.train_model(genome_size=args.genome_sizes, peaks=args.peaks,
                            blacklist=args.blacklist, fa=args.fa,
                            results_dir=args.results_dir, batch_size=batch_size,
                            steps=steps_per_epoch, patience=patience,
                            acc_regions_file=args.acc_regions_file,
-                           learning_rate=lr, opt=optimizer, ratios=ratio)
+                           learning_rate=lr, opt=optimizer, ratios=ratio,
+                           filter_width=filter_width,
+                           no_of_filters=no_of_filters)
