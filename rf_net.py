@@ -187,7 +187,7 @@ class RecurrentNeuralFilters:
 
 def train_model(genome_size, fa, peaks, blacklist, results_dir, batch_size,
                 steps, patience, acc_regions_file, learning_rate, opt,
-                ratios):
+                ratios, filter_width, no_of_filters):
     print(steps)
     subprocess.call(['mkdir', results_dir])
     print('getting the generators & test dataset')
@@ -201,8 +201,10 @@ def train_model(genome_size, fa, peaks, blacklist, results_dir, batch_size,
                                               ratios=ratios)
 
     print('building convolutional architecture')
-    architecture = RecurrentNeuralFilters(window_len=500, n_filters=128,
-                                          rnf_kernel_size=20, pooling_stride=15,
+    architecture = RecurrentNeuralFilters(window_len=500,
+                                          n_filters=no_of_filters,
+                                          rnf_kernel_size=filter_width,
+                                          pooling_stride=15,
                                           pooling_size=15, n_dense_layers=2,
                                           dropout_freq=0.5, dense_size=128,
                                           rnf_dim=16)

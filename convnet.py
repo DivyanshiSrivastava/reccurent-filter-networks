@@ -58,7 +58,7 @@ class PrecisionRecall(Callback):
 class ConvNet:
 
     def __init__(self, window_len, n_filters, filter_size, pooling_stride,
-                 pooling_size, n_dense_layers, dropout_freq, dense_size):
+                 pooling_size, n_dense_layers, dropout_freq, dense_size,):
         self.window_len = window_len
         self.n_filters = n_filters
         self.filter_size = filter_size
@@ -143,7 +143,8 @@ class ConvNet:
 
 
 def train_model(genome_size, fa, peaks, blacklist, results_dir, batch_size,
-                steps, patience, acc_regions_file, learning_rate, opt, ratios):
+                steps, patience, acc_regions_file, learning_rate, opt, ratios,
+                filter_width, no_of_filters):
 
     print(steps)
     subprocess.call(['mkdir', results_dir])
@@ -158,8 +159,9 @@ def train_model(genome_size, fa, peaks, blacklist, results_dir, batch_size,
                                                   ratios=ratios)
 
     print('building convolutional architecture')
-    architecture = ConvNet(window_len=500, n_filters=128, filter_size=20,
-                           pooling_stride=15, pooling_size=15, n_dense_layers=2,
+    architecture = ConvNet(window_len=500, n_filters=no_of_filters,
+                           filter_size=filter_width, pooling_stride=15,
+                           pooling_size=15, n_dense_layers=2,
                            dropout_freq=0.5, dense_size=128)
     model = architecture.get_model()
     print('fitting the model')
