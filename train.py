@@ -16,9 +16,11 @@ if __name__ == "__main__":
     parser.add_argument('fa', help='Input genomic fasta file')
     parser.add_argument('peaks', help='Input ChIP-seq peaks file in multiGPS format')
     parser.add_argument('results_dir', help='Directory for storing results')
+    # specify defaults here
     parser.add_argument('--params_yaml', help='Hyper-parameters_yaml_file')
     parser.add_argument('--acc_regions_file', help='BED file:accessible regions')
-    parser.add_argument('--network_type', help='Either CNN or RFN')
+    parser.add_argument('--network_type', help='Either CNN or RFN',
+                        default='CNN')
 
     args = parser.parse_args()
 
