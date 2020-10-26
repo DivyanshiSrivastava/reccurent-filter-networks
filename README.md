@@ -6,6 +6,6 @@ DNA sequences contain short sequence motifs that bind transciption factors (TF).
 
 python >= 3.5  
 We suggest using anaconda to create a virtual environment using the provided YAML configuration file:
-`conda env create -f bichrom.yml`  
+`conda env create -f recurrent_env.yml`  
 Alternatively, to install requirements using pip: 
 `pip install -r requirements.txt`
