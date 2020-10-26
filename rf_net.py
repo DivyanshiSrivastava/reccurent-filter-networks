@@ -14,7 +14,7 @@ from tensorflow.keras.layers import Conv1D, MaxPooling1D, LSTM, Reshape
 from tensorflow.keras.optimizers import SGD, Adam
 from tensorflow.keras.callbacks import Callback
 from tensorflow.keras import optimizers
-from tensorflow.keras.layers import Layer, TimeDistributed, RNN
+from tensorflow.keras.layers import Layer, TimeDistributed, SimpleRNN
 import tensorflow.keras.backend as K
 
 import get_data
@@ -87,7 +87,7 @@ class RecurrentNeuralFilters:
     """
 
     def __init__(self, window_len, pooling_stride, pooling_size, n_dense_layers,
-                 dropout_freq, dense_size, rnf_kernel_size, n_filters, rnf_dim):
+                 dropout_freq, dense_size, rnf_kernel_size, n_filters):
         self.window_len = window_len  # previously seq_length
         self.pooling_stride = pooling_stride
         self.pooling_size = pooling_size
@@ -96,7 +96,6 @@ class RecurrentNeuralFilters:
         self.dense_size = dense_size
         # RF parameters:
         self.rnf_kernel_size = rnf_kernel_size
-        self.rnf_dim = rnf_dim
         self.n_filters = n_filters  # previously: rnf_filters
         # Note: rnf_kernel_size and n_filters are same as that for the convnet.
 
@@ -109,8 +108,8 @@ class RecurrentNeuralFilters:
         # independent time steps.
         # So here, the same GRU is being applied to every chunk.
         print('RNF_kernel_size: {}'.format(self.rnf_kernel_size))
-        print('RNF_dimension: {}'.format(self.rnf_dim))
-        xs = TimeDistributed(RNN(self.rnf_dim))(chunked_input)
+        print('RNF_dimension: {}'.format(self.n_filters))
+        xs = TimeDistributed(SimpleRNN(self.n_filters))(chunked_input)
         xs = Activation('relu')(xs)
         # Shape:(?, L-F+1, RNF_DIM) # Note here, the LSTM is producing
         # a single output with dimension RNF_DIM
@@ -152,7 +151,7 @@ class RecurrentNeuralFilters:
         # save the best performing model
         model_path_best = results_dir + '/model.best.hdf5'
         checkpoint_models = tf.keras.callbacks.ModelCheckpoint(filepath=model_path_best,
-                                                               monitor='val_auprc',
+                                                               monitor='val_auc',
                                                                save_best_only=True)
         model_rnf.fit(train_gen,
                       steps_per_epoch=steps_per_epoch,
@@ -206,8 +205,7 @@ def train_model(genome_size, fa, peaks, blacklist, results_dir, batch_size,
                                           rnf_kernel_size=filter_width,
                                           pooling_stride=15,
                                           pooling_size=15, n_dense_layers=2,
-                                          dropout_freq=0.5, dense_size=128,
-                                          rnf_dim=16)
+                                          dropout_freq=0.5, dense_size=128)
     model = architecture.build_rnf_model()
     print('fitting the model')
     # parsing the validation data tuple. (same as that returned be test data)
