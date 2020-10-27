@@ -1,6 +1,5 @@
 import numpy as np
-import process_data
-import sys
+from train_recurrent_kernels import process_data
 
 
 def save_batches(file_name, generator, outdir):

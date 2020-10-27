@@ -17,13 +17,13 @@ from sklearn.metrics import average_precision_score
 import tensorflow as tf
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.models import Model, load_model
-from tensorflow.keras.layers import Dense, Dropout, Activation, Flatten, Input
-from tensorflow.keras.layers import Conv1D, MaxPooling1D, LSTM, Reshape
+from tensorflow.keras.layers import Dense, Dropout, Activation, Input
+from tensorflow.keras.layers import Conv1D, MaxPooling1D, LSTM
 from tensorflow.keras.optimizers import SGD, Adam
 from tensorflow.keras.callbacks import Callback
 from tensorflow.keras import optimizers
 
-import get_data
+from train_recurrent_kernels import get_data
 
 
 # using a callback to access validation data and access auPRC at each

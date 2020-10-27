@@ -23,7 +23,7 @@ import pybedtools
 from pybedtools import BedTool
 
 # local imports
-import utils
+from train_recurrent_kernels import utils
 
 pybedtools.set_tempdir('/storage/home/dvs5680/scratch/')
 np.random.seed(9)
