@@ -69,6 +69,14 @@ class DistributeInputLayer(Layer):
         output_shape = (input_shape[0], self.seq_len - self.filter_width + 1, self.filter_width, input_shape[-1])
         return output_shape
 
+    def get_config(self):
+        config = super().get_config().copy()
+        config.update({
+            'seq_len': self.seq_len,
+            'filter_width': self.filter_width
+        })
+        return config
+
 
 class RecurrentNeuralFilters:
     """
