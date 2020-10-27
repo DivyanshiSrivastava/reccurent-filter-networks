@@ -1,4 +1,5 @@
 import subprocess
+import pybedtools
 
 # sk-learn imports
 from sklearn.metrics import roc_auc_score
@@ -8,14 +9,16 @@ from sklearn.metrics import average_precision_score
 import tensorflow as tf
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.models import Model, load_model
-from tensorflow.keras.layers import Dense, Dropout, Activation, Input
-from tensorflow.keras.layers import MaxPooling1D, LSTM, Reshape
+from tensorflow.keras.layers import Dense, Dropout, Activation, Flatten, Input
+from tensorflow.keras.layers import Conv1D, MaxPooling1D, LSTM, Reshape
 from tensorflow.keras.optimizers import SGD, Adam
+from tensorflow.keras.callbacks import Callback
 from tensorflow.keras import optimizers
 from tensorflow.keras.layers import Layer, TimeDistributed, SimpleRNN
 import tensorflow.keras.backend as K
 
-from train_recurrent_kernels import convnet, get_data
+import get_data
+import convnet
 
 
 # This class is adapted from:

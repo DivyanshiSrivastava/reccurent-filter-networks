@@ -5,8 +5,9 @@ Author: Divyanshi Srivastava (dvs5680@psu.edu)
 The Pennsylvania State University
 """
 import argparse
-from train_recurrent_kernels import convnet, rf_net
+import convnet
 import yaml
+import rf_net
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Test the processing pipeline')
