@@ -22,22 +22,25 @@ usage: train.py [-h] [--params_yaml]
                 genome_sizes blacklist fa peaks results_dir
 ```
 
-### Description of Input Data
-#### Required Inputs
-genome_size: A standard file that records the chromosome sizes for each chromosome in the genome of interest. 
-blacklist: A standard BED format blacklist file. Blacklist files for the human hg38 and hg37 genomes can be found here: https://sites.google.com/site/anshulkundaje/projects/blacklists. Blacklist files for other commonly used genome annotations are here: https://github.com/Boyle-Lab/Blacklist/tree/master/lists
-fa: The complete fasta file for the genome of interest. 
-peaks: An EVENTS format file of ChIP-seq peaks. An example ".events" file looks as follows:
+**Input Data**
+**Required Inputs:**
+1. *genome_size*: A standard file that records the chromosome sizes for each chromosome in the genome of interest. 
+1. *blacklist*: A standard BED format blacklist file. Blacklist files for the human hg38 and hg37 genomes can be found here: https://sites.google.com/site/anshulkundaje/projects/blacklists. Blacklist files for other commonly used genome annotations are here: https://github.com/Boyle-Lab/Blacklist/tree/master/lists
+1. *fa*: The complete fasta file for the genome of interest. 
+1. *peaks*: An EVENTS format file of ChIP-seq peaks. An example ".events" file looks as follows:
++
 ```
 chr1:247890
 chr7:1288919
 ...
 chrX:89129
 ```
-results_dir: Output directory for storing the Model performance. 
-#### Optional Inputs 
---params_yaml: YAML file that contains network hyper-parameters. If this argument is not provided, default parameter settings will be used. 
+1. *results_dir*: Output directory for storing the Model performance. 
+
+**Optional Inputs:** 
+1. --params_yaml: YAML file that contains network hyper-parameters. If this argument is not provided, default parameter settings will be used. 
 Sample YAML file: 
++
 ```
 parameters:
   batch_size: 512
@@ -49,7 +52,7 @@ parameters:
   filter_width: 20
   no_of_filters: 128
 ```
---acc_regions_file: A BED file with accessible genomics regions. If this argument is provided, the selection procedure for negative training batches does not consider chromatin accessibility.
+1. --acc_regions_file: A BED file with accessible genomics regions. If this argument is provided, the selection procedure for negative training batches does not consider chromatin accessibility.
 
---network_type: 'RNF' or 'CNN'. If this argument is not provided, a default recurrent network is trained. 
+1. --network_type: 'RNF' or 'CNN'. If this argument is not provided, a default recurrent network is trained. 
 
