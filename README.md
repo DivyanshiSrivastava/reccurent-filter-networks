@@ -23,7 +23,7 @@ usage: train.py [-h] [--params_yaml]
 ```
 
 **Required Arguments:**
-* *genome_size*: A standard file that records the chromosome sizes for each chromosome in the genome of interest. 
+* *genome_sizes*: A standard file that records the chromosome sizes for each chromosome in the genome of interest. 
 * *blacklist*: A standard BED format blacklist file. Blacklist files for the human hg38 and hg37 genomes can be found here: https://sites.google.com/site/anshulkundaje/projects/blacklists. Blacklist files for other commonly used genome annotations are here: https://github.com/Boyle-Lab/Blacklist/tree/master/lists
 * *fa*: The complete fasta file for the genome of interest. 
 * *peaks*: File containing ChIP-seq peaks in the multiGPS events format. Each row records one ChIP-seq peak. 
